@@ -2,6 +2,7 @@ import { FormEvent, PointerEvent, ReactNode, useEffect, useMemo, useRef, useStat
 import { initialFeedback, initialPosts, initialProfile, initialWorks } from './data'
 import type { FeedbackEvent, Platform, Post, Tab, UserProfile, Work } from './types'
 import { compressImage } from './utils/image'
+import { AppSession, authMode, getSession, requestEmailCode, signOut, verifyEmailCode } from './services/auth'
 
 const storageKey = 'creator-life-v1'
 
@@ -20,6 +21,8 @@ const today = new Date().toISOString().slice(0, 10)
 
 export default function App() {
   const [state, setState] = useState(loadState)
+  const [session, setSession] = useState<AppSession | null>(null)
+  const [sessionReady, setSessionReady] = useState(false)
   const [tab, setTab] = useState<Tab>('home')
   const [showWorkForm, setShowWorkForm] = useState(false)
   const [showPostForm, setShowPostForm] = useState(false)
@@ -36,6 +39,7 @@ export default function App() {
   const frameRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => { localStorage.setItem(storageKey, JSON.stringify(state)) }, [state])
+  useEffect(() => { getSession().then(setSession).finally(() => setSessionReady(true)) }, [])
 
   const memories = useMemo(() => {
     const highlighted = state.works.slice().sort((a: Work, b: Work) => (b.likes + b.favorites) - (a.likes + a.favorites)).slice(0, 2)
@@ -141,11 +145,19 @@ export default function App() {
   }
   function endDrag() { drag.current = null }
 
+  async function handleSignOut() {
+    await signOut()
+    setSession(null)
+  }
+
   const nav = [{ id: 'home', label: '首页' }, { id: 'works', label: '作品' }, { id: 'memories', label: '回忆' }, { id: 'community', label: '社区' }] as const
+
+  if (!sessionReady) return <main className="app-shell"><section className="auth-loading">正在打开你的创作桌面...</section></main>
+  if (!session) return <EmailAuthPage onAuthenticated={setSession} />
 
   return <main className="app-shell">
     <section className="mobile-frame" ref={frameRef}>
-      <header className="topbar"><span className="brand">留白</span><span className="mode-pill">生活模式</span></header>
+      <header className="topbar"><span className="brand">留白</span><span className="mode-pill">生活模式</span><div className="account-summary"><span>{session.email}</span><button onClick={handleSignOut}>退出</button></div></header>
       <div className="content">
         {selectedRecap ? <WeeklyRecap works={state.works} feedback={state.feedback} onClose={() => setSelectedRecap(false)} /> : selectedWork ? <WorkDetail work={selectedWork} feedback={state.feedback.filter((item: FeedbackEvent) => item.workId === selectedWork.id)} onClose={() => setSelectedWork(null)} onSaveNote={updateNote} onFeedback={addFeedback} /> : <>
           {tab === 'home' && <Home profile={state.profile} works={state.works} feedback={state.feedback} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} onNavigate={nextTab => { setTab(nextTab); if (nextTab === 'community') setCommunityView('feed') }} onOpenProfile={() => { setTab('community'); setCommunityView('profile') }} />}
@@ -162,6 +174,40 @@ export default function App() {
     {showPostForm && <Modal title="发布到社区" onClose={() => setShowPostForm(false)}><PostForm onSave={savePost} /></Modal>}
     {showProfileForm && <Modal title="编辑个人资料" onClose={() => setShowProfileForm(false)}><ProfileForm profile={state.profile} onSave={saveProfile} /></Modal>}
   </main>
+}
+
+function EmailAuthPage({ onAuthenticated }: { onAuthenticated: (session: AppSession) => void }) {
+  const [email, setEmail] = useState('')
+  const [code, setCode] = useState('')
+  const [sent, setSent] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState('')
+
+  async function sendCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setLoading(true)
+    setMessage('')
+    try {
+      const result = await requestEmailCode(email.trim())
+      setSent(true)
+      setMessage(result.previewCode ? `本地预览验证码：${result.previewCode}` : '验证码已发送，请前往邮箱查看。')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '验证码发送失败，请稍后再试。')
+    } finally { setLoading(false) }
+  }
+
+  async function verifyCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setLoading(true)
+    setMessage('')
+    try {
+      onAuthenticated(await verifyEmailCode(email.trim(), code.trim()))
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '登录失败，请重新尝试。')
+    } finally { setLoading(false) }
+  }
+
+  return <main className="auth-shell"><section className="auth-card"><div className="auth-sticker">留</div><p className="eyebrow">创作生活</p><h1>先把你自己<br />带进来。</h1><p className="auth-copy">用邮箱验证码进入。手机号登录和免登录会作为移动端的后续认证方式。</p>{!sent ? <form className="auth-form" onSubmit={sendCode}><label>邮箱地址<input type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="name@example.com" required autoFocus /></label><button className="primary" disabled={loading}>{loading ? '发送中...' : '获取验证码'}</button></form> : <form className="auth-form" onSubmit={verifyCode}><label>验证码<input inputMode="numeric" value={code} onChange={event => setCode(event.target.value)} placeholder="输入 6 位验证码" maxLength={6} required autoFocus /></label><button className="primary" disabled={loading}>{loading ? '验证中...' : '进入创作桌面'}</button><button className="text-action" type="button" onClick={() => setSent(false)}>更换邮箱</button></form>}<p className="auth-message">{message}</p>{authMode === 'local-preview' && <p className="auth-preview">当前为本地开发预览，未配置真实邮件服务。</p>}</section></main>
 }
 
 function Home({ profile, works, feedback, onAdd, onOpenWork, onNavigate, onOpenProfile }: { profile: UserProfile; works: Work[]; feedback: FeedbackEvent[]; onAdd: () => void; onOpenWork: (work: Work) => void; onNavigate: (tab: Tab) => void; onOpenProfile: () => void }) {
