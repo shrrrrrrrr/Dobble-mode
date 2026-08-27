@@ -1,5 +1,5 @@
 export type Tab = 'home' | 'works' | 'memories' | 'community'
-export type Platform = '抖音' | '小红书' | 'B站' | '视频号' | '其他'
+export type Platform = '抖音' | '小红书' | 'B站' | '视频号'
 
 export interface Work {
   id: string

@@ -22,11 +22,13 @@ export default function App() {
   const [showWorkForm, setShowWorkForm] = useState(false)
   const [showPostForm, setShowPostForm] = useState(false)
   const [selectedWork, setSelectedWork] = useState<Work | null>(null)
+  const [communityView, setCommunityView] = useState<'feed' | 'profile'>('feed')
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [assistantPos, setAssistantPos] = useState({ x: 0, y: 0 })
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('我在。想看看你最近留下了什么，还是聊聊一条作品？')
   const drag = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null)
+  const didDrag = useRef(false)
 
   useEffect(() => { localStorage.setItem(storageKey, JSON.stringify(state)) }, [state])
 
@@ -80,8 +82,7 @@ export default function App() {
     setState((current: typeof state) => ({ ...current, posts: current.posts.map((post: Post) => post.id === postId ? { ...post, liked: !post.liked, likes: post.likes + (post.liked ? -1 : 1) } : post) }))
   }
 
-  function addComment(postId: string) {
-    const comment = window.prompt('写下你的回应：')?.trim()
+  function addComment(postId: string, comment: string) {
     if (!comment) return
     setState((current: typeof state) => ({ ...current, posts: current.posts.map((post: Post) => post.id === postId ? { ...post, comments: [...post.comments, comment] } : post) }))
   }
@@ -101,11 +102,13 @@ export default function App() {
   }
 
   function startDrag(event: PointerEvent<HTMLButtonElement>) {
+    didDrag.current = false
     drag.current = { startX: event.clientX, startY: event.clientY, originX: assistantPos.x, originY: assistantPos.y }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
   function moveDrag(event: PointerEvent<HTMLButtonElement>) {
     if (!drag.current) return
+    if (Math.abs(event.clientX - drag.current.startX) > 5 || Math.abs(event.clientY - drag.current.startY) > 5) didDrag.current = true
     setAssistantPos({ x: drag.current.originX + event.clientX - drag.current.startX, y: drag.current.originY + event.clientY - drag.current.startY })
   }
   function endDrag() { drag.current = null }
@@ -114,20 +117,21 @@ export default function App() {
 
   return <main className="app-shell">
     <section className="mobile-frame">
-      <header className="topbar"><span className="brand">留白</span><span className="mode-pill">生活模式</span><button className="profile-button" aria-label="个人主页">我</button></header>
+      <header className="topbar"><span className="brand">留白</span><span className="mode-pill">生活模式</span></header>
       <div className="content">
-        {tab === 'home' && <Home works={state.works} feedback={state.feedback} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} />}
-        {tab === 'works' && <Works works={state.works} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} />}
-        {tab === 'memories' && <Memories memories={memories} works={state.works} />}
-        {tab === 'community' && <Community posts={state.posts} onAdd={() => setShowPostForm(true)} onLike={toggleLike} onComment={addComment} />}
+        {selectedWork ? <WorkDetail work={selectedWork} feedback={state.feedback.filter((item: FeedbackEvent) => item.workId === selectedWork.id)} onClose={() => setSelectedWork(null)} onSaveNote={updateNote} onFeedback={addFeedback} /> : <>
+          {tab === 'home' && <Home works={state.works} feedback={state.feedback} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} />}
+          {tab === 'works' && <Works works={state.works} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} />}
+          {tab === 'memories' && <Memories memories={memories} works={state.works} />}
+          {tab === 'community' && <Community view={communityView} posts={state.posts} onAdd={() => setShowPostForm(true)} onLike={toggleLike} onComment={addComment} onViewChange={setCommunityView} />}
+        </>}
       </div>
-      <nav className="bottom-nav">{nav.map(item => <button key={item.id} className={tab === item.id ? 'active' : ''} onClick={() => setTab(item.id)}><span className="nav-mark" />{item.label}</button>)}</nav>
+      {!selectedWork && <nav className="bottom-nav">{nav.map(item => <button key={item.id} className={tab === item.id ? 'active' : ''} onClick={() => setTab(item.id)}><span className="nav-mark" />{item.label}</button>)}</nav>}
     </section>
-    <button className="companion" style={{ transform: `translate(${assistantPos.x}px, ${assistantPos.y}px)` }} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onClick={() => setAssistantOpen(true)} aria-label="打开创作陪伴"><span>留</span></button>
-    {assistantOpen && <div className="assistant-panel"><button className="close" onClick={() => setAssistantOpen(false)}>关闭</button><p className="eyebrow">创作陪伴</p><h2>今天也在记录。</h2><p className="assistant-answer">{answer}</p><form onSubmit={askAssistant}><input value={question} onChange={e => setQuestion(e.target.value)} placeholder="问问我关于你的创作" /><button>发送</button></form></div>}
+    <button className="companion" style={{ transform: `translate(${assistantPos.x}px, ${assistantPos.y}px)` }} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onClick={() => { if (!didDrag.current) setAssistantOpen(open => !open) }} aria-label="打开或关闭创作陪伴"><span>留</span></button>
+    {assistantOpen && <div className="assistant-panel" style={{ transform: `translate(${assistantPos.x}px, ${assistantPos.y}px)` }}><p className="eyebrow">创作陪伴</p><h2>今天也在记录。</h2><p className="assistant-answer">{answer}</p><form onSubmit={askAssistant}><input value={question} onChange={e => setQuestion(e.target.value)} placeholder="问问我关于你的创作" /><button>发送</button></form></div>}
     {showWorkForm && <Modal title="记录一条作品" onClose={() => setShowWorkForm(false)}><WorkForm onSave={saveWork} /></Modal>}
     {showPostForm && <Modal title="发布到社区" onClose={() => setShowPostForm(false)}><PostForm onSave={savePost} /></Modal>}
-    {selectedWork && <WorkDetail work={selectedWork} feedback={state.feedback.filter((item: FeedbackEvent) => item.workId === selectedWork.id)} onClose={() => setSelectedWork(null)} onSaveNote={updateNote} onFeedback={addFeedback} />}
   </main>
 }
 
@@ -145,12 +149,18 @@ function WorkCard({ work }: { work: Work }) { return <article className={`work-c
 
 function Memories({ memories, works }: { memories: { id: string; label: string; title: string; detail: string; note: string }[]; works: Work[] }) { return <><section className="page-head memories-head"><p className="eyebrow">回忆陈列室</p><h1>有些时刻，<br />不必只看数字。</h1><p>回忆会随你留下的作品和感受慢慢长出来。</p></section><div className="memory-stack">{memories.map((memory, index) => <article className={`memory-card memory-${index}`} key={memory.id}><p>{memory.label}</p><h2>{memory.title}</h2><span>{memory.detail}</span><blockquote>{memory.note || '这一刻，值得被收起来。'}</blockquote></article>)}</div><p className="small-note">基于 {works.length} 条作品与创作记录生成</p></> }
 
-function Community({ posts, onAdd, onLike, onComment }: { posts: Post[]; onAdd: () => void; onLike: (id: string) => void; onComment: (id: string) => void }) { return <><section className="page-head community-head"><p className="eyebrow">创作者社区</p><h1>说说你正在<br />经历的创作。</h1><button className="primary compact" onClick={onAdd}>发布</button></section><div className="post-list">{posts.map(post => <article className="post" key={post.id}><div className="post-author"><span className="avatar">{post.avatar}</span><div><strong>{post.author}</strong><small>{post.createdAt}</small></div></div><p className="post-content">{post.content}</p>{post.image && <div className="post-image">{post.image}</div>}<div className="post-actions"><button className={post.liked ? 'liked' : ''} onClick={() => onLike(post.id)}>喜欢 {post.likes}</button><button onClick={() => onComment(post.id)}>回应 {post.comments.length}</button></div>{post.comments.slice(-2).map((comment, index) => <p className="comment" key={index}>{comment}</p>)}</article>)}</div></> }
+function Community({ view, posts, onAdd, onLike, onComment, onViewChange }: { view: 'feed' | 'profile'; posts: Post[]; onAdd: () => void; onLike: (id: string) => void; onComment: (id: string, comment: string) => void; onViewChange: (view: 'feed' | 'profile') => void }) {
+  const [replyingTo, setReplyingTo] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  const myPosts = posts.filter(post => post.author === '我')
+  if (view === 'profile') return <><section className="profile-page"><button className="back-link" onClick={() => onViewChange('feed')}>返回社区</button><div className="profile-avatar">我</div><p className="eyebrow">个人主页</p><h1>我的创作角落</h1><div className="badges"><span>连续记录者</span><span>社区新朋友</span></div></section><section className="section"><p className="eyebrow">我的发帖</p>{myPosts.length ? myPosts.map(post => <article className="post mine" key={post.id}><p className="post-content">{post.content}</p><small>{post.createdAt} · {post.likes} 次喜欢</small></article>) : <p className="empty">你还没有发布内容。去社区说说正在经历的创作吧。</p>}</section></>
+  return <><section className="page-head community-head"><p className="eyebrow">创作者社区</p><h1>说说你正在<br />经历的创作。</h1><div className="community-actions"><button className="text-button" onClick={() => onViewChange('profile')}>我的</button><button className="primary compact" onClick={onAdd}>发布</button></div></section><div className="post-list">{posts.map(post => <article className="post" key={post.id}><div className="post-author"><span className="avatar">{post.avatar}</span><div><strong>{post.author}</strong><small>{post.createdAt}</small></div></div><p className="post-content">{post.content}</p>{post.image && <div className="post-image">{post.image}</div>}<div className="post-actions"><button className={post.liked ? 'liked' : ''} onClick={() => onLike(post.id)}>喜欢 {post.likes}</button><button onClick={() => setReplyingTo(replyingTo === post.id ? null : post.id)}>回应 {post.comments.length}</button></div>{replyingTo === post.id && <form className="reply-form" onSubmit={event => { event.preventDefault(); onComment(post.id, draft.trim()); setDraft(''); setReplyingTo(null) }}><input value={draft} onChange={event => setDraft(event.target.value)} placeholder="写下你的回应" autoFocus /><button disabled={!draft.trim()}>发送</button></form>}{post.comments.slice(-2).map((comment, index) => <p className="comment" key={index}>{comment}</p>)}</article>)}</div></>
+}
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) { return <div className="modal-backdrop" onMouseDown={onClose}><section className="modal" onMouseDown={event => event.stopPropagation()}><button className="close" onClick={onClose}>关闭</button><h2>{title}</h2>{children}</section></div> }
 
-function WorkForm({ onSave }: { onSave: (event: FormEvent<HTMLFormElement>) => void }) { return <form className="entry-form" onSubmit={onSave}><label>标题<input name="title" required placeholder="这条作品叫什么？" /></label><div className="two-columns"><label>平台<select name="platform" defaultValue="小红书"><option>抖音</option><option>小红书</option><option>B站</option><option>视频号</option><option>其他</option></select></label><label>发布时间<input name="publishedAt" type="date" defaultValue={today} /></label></div><div className="two-columns"><label>观看/阅读<input name="plays" type="number" min="0" placeholder="0" /></label><label>点赞<input name="likes" type="number" min="0" placeholder="0" /></label></div><div className="two-columns"><label>评论<input name="comments" type="number" min="0" placeholder="0" /></label><label>收藏<input name="favorites" type="number" min="0" placeholder="0" /></label></div><label>封面印象<input name="cover" placeholder="例如：窗边、晚餐、街道" /></label><label>此刻的感受<select name="mood" defaultValue="平静"><option>雀跃</option><option>平静</option><option>疲惫</option><option>骄傲</option></select></label><label>作品便签<textarea name="note" placeholder="不必写得漂亮，留下当时的自己就好。" /></label><button className="primary" type="submit">保存作品</button></form> }
+function WorkForm({ onSave }: { onSave: (event: FormEvent<HTMLFormElement>) => void }) { return <form className="entry-form" onSubmit={onSave}><label>标题<input name="title" required placeholder="这条作品叫什么？" /></label><div className="two-columns"><label>平台<select name="platform" defaultValue="小红书"><option>抖音</option><option>小红书</option><option>B站</option><option>视频号</option></select></label><label>发布时间<input name="publishedAt" type="date" defaultValue={today} /></label></div><div className="two-columns"><label>观看/阅读<input name="plays" type="number" min="0" placeholder="0" /></label><label>点赞<input name="likes" type="number" min="0" placeholder="0" /></label></div><div className="two-columns"><label>评论<input name="comments" type="number" min="0" placeholder="0" /></label><label>收藏<input name="favorites" type="number" min="0" placeholder="0" /></label></div><label>分享<input name="shares" type="number" min="0" placeholder="0" /></label><label>封面印象<input name="cover" placeholder="例如：窗边、晚餐、街道" /></label><label>此刻的感受<select name="mood" defaultValue="平静"><option>雀跃</option><option>平静</option><option>疲惫</option><option>骄傲</option></select></label><label>作品便签<textarea name="note" placeholder="不必写得漂亮，留下当时的自己就好。" /></label><button className="primary" type="submit">保存作品</button></form> }
 
 function PostForm({ onSave }: { onSave: (event: FormEvent<HTMLFormElement>) => void }) { return <form className="entry-form" onSubmit={onSave}><label>想说的话<textarea name="content" required placeholder="只支持普通文字。" /></label><label>图片说明（V1 演示）<input name="image" placeholder="例如：我的工作台" /></label><button className="primary" type="submit">发布</button></form> }
 
-function WorkDetail({ work, feedback, onClose, onSaveNote, onFeedback }: { work: Work; feedback: FeedbackEvent[]; onClose: () => void; onSaveNote: (id: string, note: string) => void; onFeedback: (id: string) => void }) { const [note, setNote] = useState(work.note); return <div className="modal-backdrop"><section className="modal detail"><button className="close" onClick={onClose}>关闭</button><p className="eyebrow">{work.platform} · {work.publishedAt}</p><h2>{work.title}</h2><div className="detail-metrics"><span>{number(work.plays)}<small>观看</small></span><span>{number(work.likes)}<small>喜欢</small></span><span>{work.comments}<small>评论</small></span><span>{number(work.favorites)}<small>收藏</small></span></div><label className="note-field">生活便签<textarea value={note} onChange={e => setNote(e.target.value)} onBlur={() => onSaveNote(work.id, note)} /></label><div className="detail-head"><p className="eyebrow">珍藏反馈</p><button onClick={() => onFeedback(work.id)}>记录时刻</button></div>{feedback.length ? feedback.map(item => <article className="moment" key={item.id}><span>{item.type}</span><p>{item.content}</p></article>) : <p className="empty">留下一句评论或一个感受，它会在回忆里出现。</p>}</section></div> }
+function WorkDetail({ work, feedback, onClose, onSaveNote, onFeedback }: { work: Work; feedback: FeedbackEvent[]; onClose: () => void; onSaveNote: (id: string, note: string) => void; onFeedback: (id: string) => void }) { const [note, setNote] = useState(work.note); return <section className="work-detail-page"><button className="back-link" onClick={onClose}>返回</button><div className={`detail-cover cover-${work.id.slice(-1)}`}><span>{work.cover}</span></div><p className="eyebrow">{work.platform} · 发布于 {work.publishedAt}</p><h1>{work.title}</h1><p className="detail-mood">那时的你：{work.mood}</p><div className="detail-metrics"><span>{number(work.plays)}<small>观看</small></span><span>{number(work.likes)}<small>喜欢</small></span><span>{work.comments}<small>评论</small></span><span>{number(work.favorites)}<small>收藏</small></span><span>{work.shares}<small>分享</small></span></div><label className="note-field">生活便签<textarea value={note} onChange={e => setNote(e.target.value)} onBlur={() => onSaveNote(work.id, note)} /></label><div className="detail-head"><p className="eyebrow">珍藏反馈</p><button onClick={() => onFeedback(work.id)}>记录时刻</button></div>{feedback.length ? feedback.map(item => <article className="moment" key={item.id}><span>{item.type}</span><p>{item.content}</p></article>) : <p className="empty">留下一句评论或一个感受，它会在回忆里出现。</p>}</section> }
