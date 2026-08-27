@@ -1,15 +1,15 @@
 import { FormEvent, PointerEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
-import { initialFeedback, initialPosts, initialWorks } from './data'
-import type { FeedbackEvent, Platform, Post, Tab, Work } from './types'
+import { initialFeedback, initialPosts, initialProfile, initialWorks } from './data'
+import type { FeedbackEvent, Platform, Post, Tab, UserProfile, Work } from './types'
 
 const storageKey = 'creator-life-v1'
 
 function loadState() {
   try {
     const saved = localStorage.getItem(storageKey)
-    return saved ? JSON.parse(saved) : { works: initialWorks, feedback: initialFeedback, posts: initialPosts }
+    return saved ? { ...JSON.parse(saved), profile: JSON.parse(saved).profile ?? initialProfile } : { works: initialWorks, feedback: initialFeedback, posts: initialPosts, profile: initialProfile }
   } catch {
-    return { works: initialWorks, feedback: initialFeedback, posts: initialPosts }
+    return { works: initialWorks, feedback: initialFeedback, posts: initialPosts, profile: initialProfile }
   }
 }
 
@@ -27,8 +27,9 @@ export default function App() {
   const [assistantPos, setAssistantPos] = useState({ x: 0, y: 0 })
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('我在。想看看你最近留下了什么，还是聊聊一条作品？')
-  const drag = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null)
+  const drag = useRef<{ startX: number; startY: number; originX: number; originY: number; minX: number; maxX: number; minY: number; maxY: number } | null>(null)
   const didDrag = useRef(false)
+  const frameRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => { localStorage.setItem(storageKey, JSON.stringify(state)) }, [state])
 
@@ -62,7 +63,7 @@ export default function App() {
     const form = new FormData(event.currentTarget)
     const content = String(form.get('content')).trim()
     if (!content) return
-    const post: Post = { id: crypto.randomUUID(), author: '我', avatar: '我', content, image: String(form.get('image')).trim() || undefined, createdAt: '刚刚', likes: 0, liked: false, comments: [] }
+    const post: Post = { id: crypto.randomUUID(), author: state.profile.nickname, avatar: state.profile.avatarLabel, content, image: String(form.get('image')).trim() || undefined, createdAt: '刚刚', likes: 0, liked: false, comments: [] }
     setState((current: typeof state) => ({ ...current, posts: [post, ...current.posts] }))
     setShowPostForm(false)
   }
@@ -103,27 +104,35 @@ export default function App() {
 
   function startDrag(event: PointerEvent<HTMLButtonElement>) {
     didDrag.current = false
-    drag.current = { startX: event.clientX, startY: event.clientY, originX: assistantPos.x, originY: assistantPos.y }
+    const companionBounds = event.currentTarget.getBoundingClientRect()
+    const frameBounds = frameRef.current?.getBoundingClientRect()
+    const left = Math.max(0, frameBounds?.left ?? 0)
+    const right = Math.min(window.innerWidth, frameBounds?.right ?? window.innerWidth)
+    const top = Math.max(0, frameBounds?.top ?? 0)
+    const bottom = Math.min(window.innerHeight, frameBounds?.bottom ?? window.innerHeight)
+    drag.current = { startX: event.clientX, startY: event.clientY, originX: assistantPos.x, originY: assistantPos.y, minX: assistantPos.x + left - companionBounds.left, maxX: assistantPos.x + right - companionBounds.right, minY: assistantPos.y + top - companionBounds.top, maxY: assistantPos.y + bottom - companionBounds.bottom }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
   function moveDrag(event: PointerEvent<HTMLButtonElement>) {
     if (!drag.current) return
     if (Math.abs(event.clientX - drag.current.startX) > 5 || Math.abs(event.clientY - drag.current.startY) > 5) didDrag.current = true
-    setAssistantPos({ x: drag.current.originX + event.clientX - drag.current.startX, y: drag.current.originY + event.clientY - drag.current.startY })
+    const x = drag.current.originX + event.clientX - drag.current.startX
+    const y = drag.current.originY + event.clientY - drag.current.startY
+    setAssistantPos({ x: Math.max(drag.current.minX, Math.min(drag.current.maxX, x)), y: Math.max(drag.current.minY, Math.min(drag.current.maxY, y)) })
   }
   function endDrag() { drag.current = null }
 
   const nav = [{ id: 'home', label: '首页' }, { id: 'works', label: '作品' }, { id: 'memories', label: '回忆' }, { id: 'community', label: '社区' }] as const
 
   return <main className="app-shell">
-    <section className="mobile-frame">
+    <section className="mobile-frame" ref={frameRef}>
       <header className="topbar"><span className="brand">留白</span><span className="mode-pill">生活模式</span></header>
       <div className="content">
         {selectedWork ? <WorkDetail work={selectedWork} feedback={state.feedback.filter((item: FeedbackEvent) => item.workId === selectedWork.id)} onClose={() => setSelectedWork(null)} onSaveNote={updateNote} onFeedback={addFeedback} /> : <>
           {tab === 'home' && <Home works={state.works} feedback={state.feedback} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} />}
           {tab === 'works' && <Works works={state.works} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} />}
           {tab === 'memories' && <Memories memories={memories} works={state.works} />}
-          {tab === 'community' && <Community view={communityView} posts={state.posts} onAdd={() => setShowPostForm(true)} onLike={toggleLike} onComment={addComment} onViewChange={setCommunityView} />}
+          {tab === 'community' && <Community view={communityView} profile={state.profile} posts={state.posts} onAdd={() => setShowPostForm(true)} onLike={toggleLike} onComment={addComment} onViewChange={setCommunityView} />}
         </>}
       </div>
       {!selectedWork && <nav className="bottom-nav">{nav.map(item => <button key={item.id} className={tab === item.id ? 'active' : ''} onClick={() => setTab(item.id)}><span className="nav-mark" />{item.label}</button>)}</nav>}
@@ -138,7 +147,7 @@ export default function App() {
 function Home({ works, feedback, onAdd, onOpenWork }: { works: Work[]; feedback: FeedbackEvent[]; onAdd: () => void; onOpenWork: (work: Work) => void }) {
   const totalLikes = works.reduce((sum, work) => sum + work.likes, 0)
   const latest = works[0]
-  return <><section className="hero"><p className="eyebrow">八月 27 日，星期四</p><h1>把创作过成<br />自己的生活。</h1><p>不用急着解释数据，先把每一次认真留下来。</p><button className="primary" onClick={onAdd}>记录新作品</button></section><section className="quiet-stats"><div><strong>{works.length}</strong><span>已记录作品</span></div><div><strong>{number(totalLikes)}</strong><span>收到的赞</span></div><div><strong>{feedback.length}</strong><span>珍藏时刻</span></div></section>{latest && <section className="section"><div className="section-title"><p className="eyebrow">最近发布</p><button onClick={() => onOpenWork(latest)}>打开</button></div><WorkCard work={latest} /></section>}<section className="section"><div className="section-title"><p className="eyebrow">今天值得记住</p></div>{feedback.slice(0, 2).map(item => <article className="moment" key={item.id}><span>{item.type}</span><p>{item.content}</p></article>)}</section></>
+  return <><section className="hero"><p className="eyebrow">八月 27 日，星期四</p><h1>把创作过成<br />自己的生活。</h1><p>不用急着解释数据，先把每一次认真留下来。</p><button className="primary" onClick={onAdd}>记录新作品</button></section><section className="quiet-stats"><div><strong>{works.length}</strong><span>已记录作品</span></div><div><strong>{number(totalLikes)}</strong><span>收到的赞</span></div><div><strong>{feedback.length}</strong><span>珍藏时刻</span></div></section>{latest && <section className="section latest-work"><p className="eyebrow">最近发布</p><button className="work-button" onClick={() => onOpenWork(latest)}><WorkCard work={latest} /></button></section>}<section className="section"><div className="section-title"><p className="eyebrow">今天值得记住</p></div>{feedback.slice(0, 2).map(item => <article className="moment" key={item.id}><span>{item.type}</span><p>{item.content}</p></article>)}</section></>
 }
 
 function Works({ works, onAdd, onOpenWork }: { works: Work[]; onAdd: () => void; onOpenWork: (work: Work) => void }) {
@@ -149,12 +158,12 @@ function WorkCard({ work }: { work: Work }) { return <article className={`work-c
 
 function Memories({ memories, works }: { memories: { id: string; label: string; title: string; detail: string; note: string }[]; works: Work[] }) { return <><section className="page-head memories-head"><p className="eyebrow">回忆陈列室</p><h1>有些时刻，<br />不必只看数字。</h1><p>回忆会随你留下的作品和感受慢慢长出来。</p></section><div className="memory-stack">{memories.map((memory, index) => <article className={`memory-card memory-${index}`} key={memory.id}><p>{memory.label}</p><h2>{memory.title}</h2><span>{memory.detail}</span><blockquote>{memory.note || '这一刻，值得被收起来。'}</blockquote></article>)}</div><p className="small-note">基于 {works.length} 条作品与创作记录生成</p></> }
 
-function Community({ view, posts, onAdd, onLike, onComment, onViewChange }: { view: 'feed' | 'profile'; posts: Post[]; onAdd: () => void; onLike: (id: string) => void; onComment: (id: string, comment: string) => void; onViewChange: (view: 'feed' | 'profile') => void }) {
+function Community({ view, profile, posts, onAdd, onLike, onComment, onViewChange }: { view: 'feed' | 'profile'; profile: UserProfile; posts: Post[]; onAdd: () => void; onLike: (id: string) => void; onComment: (id: string, comment: string) => void; onViewChange: (view: 'feed' | 'profile') => void }) {
   const [replyingTo, setReplyingTo] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
-  const myPosts = posts.filter(post => post.author === '我')
-  if (view === 'profile') return <><section className="profile-page"><button className="back-link" onClick={() => onViewChange('feed')}>返回社区</button><div className="profile-avatar">我</div><p className="eyebrow">个人主页</p><h1>我的创作角落</h1><div className="badges"><span>连续记录者</span><span>社区新朋友</span></div></section><section className="section"><p className="eyebrow">我的发帖</p>{myPosts.length ? myPosts.map(post => <article className="post mine" key={post.id}><p className="post-content">{post.content}</p><small>{post.createdAt} · {post.likes} 次喜欢</small></article>) : <p className="empty">你还没有发布内容。去社区说说正在经历的创作吧。</p>}</section></>
-  return <><section className="page-head community-head"><p className="eyebrow">创作者社区</p><h1>说说你正在<br />经历的创作。</h1><div className="community-actions"><button className="text-button" onClick={() => onViewChange('profile')}>我的</button><button className="primary compact" onClick={onAdd}>发布</button></div></section><div className="post-list">{posts.map(post => <article className="post" key={post.id}><div className="post-author"><span className="avatar">{post.avatar}</span><div><strong>{post.author}</strong><small>{post.createdAt}</small></div></div><p className="post-content">{post.content}</p>{post.image && <div className="post-image">{post.image}</div>}<div className="post-actions"><button className={post.liked ? 'liked' : ''} onClick={() => onLike(post.id)}>喜欢 {post.likes}</button><button onClick={() => setReplyingTo(replyingTo === post.id ? null : post.id)}>回应 {post.comments.length}</button></div>{replyingTo === post.id && <form className="reply-form" onSubmit={event => { event.preventDefault(); onComment(post.id, draft.trim()); setDraft(''); setReplyingTo(null) }}><input value={draft} onChange={event => setDraft(event.target.value)} placeholder="写下你的回应" autoFocus /><button disabled={!draft.trim()}>发送</button></form>}{post.comments.slice(-2).map((comment, index) => <p className="comment" key={index}>{comment}</p>)}</article>)}</div></>
+  const myPosts = posts.filter(post => post.author === profile.nickname)
+  if (view === 'profile') return <><section className="profile-page"><button className="profile-nav-button back-button" onClick={() => onViewChange('feed')}>返回社区</button><div className="profile-avatar">{profile.avatarLabel}</div><p className="eyebrow">个人主页</p><h1>{profile.nickname}的创作角落</h1><p className="profile-note">头像、昵称和图片上传已预留数据位，资料编辑会在接入账号系统时开放。</p><div className="badges"><span>连续记录者</span><span>社区新朋友</span></div></section><section className="section"><p className="eyebrow">我的发帖</p>{myPosts.length ? myPosts.map(post => <article className="post mine" key={post.id}><p className="post-content">{post.content}</p><small>{post.createdAt} · {post.likes} 次喜欢</small></article>) : <p className="empty">你还没有发布内容。去社区说说正在经历的创作吧。</p>}</section></>
+  return <><section className="page-head community-head"><p className="eyebrow">创作者社区</p><h1>说说你正在<br />经历的创作。</h1><div className="community-actions"><button className="profile-nav-button" onClick={() => onViewChange('profile')}>我的</button><button className="primary compact" onClick={onAdd}>发布</button></div></section><div className="post-list">{posts.map(post => <article className="post" key={post.id}><div className="post-author"><span className="avatar">{post.avatar}</span><div><strong>{post.author}</strong><small>{post.createdAt}</small></div></div><p className="post-content">{post.content}</p>{post.image && <div className="post-image">{post.image}</div>}<div className="post-actions"><button className={post.liked ? 'liked' : ''} onClick={() => onLike(post.id)}>喜欢 {post.likes}</button><button onClick={() => setReplyingTo(replyingTo === post.id ? null : post.id)}>回应 {post.comments.length}</button></div>{replyingTo === post.id && <form className="reply-form" onSubmit={event => { event.preventDefault(); onComment(post.id, draft.trim()); setDraft(''); setReplyingTo(null) }}><input value={draft} onChange={event => setDraft(event.target.value)} placeholder="写下你的回应" autoFocus /><button disabled={!draft.trim()}>发送</button></form>}{post.comments.slice(-2).map((comment, index) => <p className="comment" key={index}>{comment}</p>)}</article>)}</div></>
 }
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) { return <div className="modal-backdrop" onMouseDown={onClose}><section className="modal" onMouseDown={event => event.stopPropagation()}><button className="close" onClick={onClose}>关闭</button><h2>{title}</h2>{children}</section></div> }

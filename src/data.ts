@@ -1,5 +1,7 @@
 import type { FeedbackEvent, Post, Work } from './types'
 
+export const initialProfile = { nickname: '我', avatarLabel: '我' }
+
 export const initialWorks: Work[] = [
   { id: 'w1', title: '下雨天的老街散步', platform: '小红书', publishedAt: '2026-08-24', cover: '雨巷', plays: 12800, likes: 863, comments: 76, favorites: 149, shares: 28, note: '拍完这条，忽然觉得慢下来也挺好。', mood: '平静' },
   { id: 'w2', title: '一人食的第 100 天', platform: '抖音', publishedAt: '2026-08-18', cover: '厨房', plays: 35600, likes: 2189, comments: 204, favorites: 327, shares: 91, note: '第一次有人说想照着我的菜单做。', mood: '骄傲' },

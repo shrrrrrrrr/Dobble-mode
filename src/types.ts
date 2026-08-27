@@ -35,3 +35,9 @@ export interface Post {
   liked: boolean
   comments: string[]
 }
+
+export interface UserProfile {
+  nickname: string
+  avatarLabel: string
+  avatarImage?: string
+}
