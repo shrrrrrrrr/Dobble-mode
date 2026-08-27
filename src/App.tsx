@@ -129,7 +129,7 @@ export default function App() {
       <header className="topbar"><span className="brand">留白</span><span className="mode-pill">生活模式</span></header>
       <div className="content">
         {selectedWork ? <WorkDetail work={selectedWork} feedback={state.feedback.filter((item: FeedbackEvent) => item.workId === selectedWork.id)} onClose={() => setSelectedWork(null)} onSaveNote={updateNote} onFeedback={addFeedback} /> : <>
-          {tab === 'home' && <Home works={state.works} feedback={state.feedback} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} />}
+          {tab === 'home' && <Home works={state.works} feedback={state.feedback} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} onNavigate={nextTab => { setTab(nextTab); if (nextTab === 'community') setCommunityView('feed') }} onOpenProfile={() => { setTab('community'); setCommunityView('profile') }} />}
           {tab === 'works' && <Works works={state.works} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} />}
           {tab === 'memories' && <Memories memories={memories} works={state.works} />}
           {tab === 'community' && <Community view={communityView} profile={state.profile} posts={state.posts} onAdd={() => setShowPostForm(true)} onLike={toggleLike} onComment={addComment} onViewChange={setCommunityView} />}
@@ -144,10 +144,31 @@ export default function App() {
   </main>
 }
 
-function Home({ works, feedback, onAdd, onOpenWork }: { works: Work[]; feedback: FeedbackEvent[]; onAdd: () => void; onOpenWork: (work: Work) => void }) {
+function Home({ works, feedback, onAdd, onOpenWork, onNavigate, onOpenProfile }: { works: Work[]; feedback: FeedbackEvent[]; onAdd: () => void; onOpenWork: (work: Work) => void; onNavigate: (tab: Tab) => void; onOpenProfile: () => void }) {
   const totalLikes = works.reduce((sum, work) => sum + work.likes, 0)
   const latest = works[0]
-  return <><section className="hero"><p className="eyebrow">八月 27 日，星期四</p><h1>把创作过成<br />自己的生活。</h1><p>不用急着解释数据，先把每一次认真留下来。</p><button className="primary" onClick={onAdd}>记录新作品</button></section><section className="quiet-stats"><div><strong>{works.length}</strong><span>已记录作品</span></div><div><strong>{number(totalLikes)}</strong><span>收到的赞</span></div><div><strong>{feedback.length}</strong><span>珍藏时刻</span></div></section>{latest && <section className="section latest-work"><p className="eyebrow">最近发布</p><button className="work-button" onClick={() => onOpenWork(latest)}><WorkCard work={latest} /></button></section>}<section className="section"><div className="section-title"><p className="eyebrow">今天值得记住</p></div>{feedback.slice(0, 2).map(item => <article className="moment" key={item.id}><span>{item.type}</span><p>{item.content}</p></article>)}</section></>
+  return <div className="studio-layout">
+    <aside className="creator-aside">
+      <button className="avatar-sticker tile-interactive" onClick={onOpenProfile} aria-label="打开我的主页">我</button>
+      <div><h2>今天的<br />创作桌面</h2><p>慢一点，也没关系。</p></div>
+      <nav className="studio-nav" aria-label="创作桌面导航">
+        <button className="side-link tile-interactive" onClick={() => onNavigate('works')}><i />作品档案</button>
+        <button className="side-link tile-interactive" onClick={() => onNavigate('memories')}><i />短期回看</button>
+        <button className="side-link tile-interactive" onClick={() => onNavigate('community')}><i />创作社区</button>
+      </nav>
+      <button className="aside-note tile-interactive" onClick={onOpenProfile}>我的徽章与发帖</button>
+    </aside>
+    <section className="studio-stage">
+      <section className="hero studio-hero"><p className="eyebrow">八月 27 日，星期四</p><h1>把创作过成<br />自己的生活。</h1><p>不用急着解释数据，先把每一次认真留下来。</p><button className="primary tile-interactive" onClick={onAdd}>记录新作品</button></section>
+      {latest && <button className="latest-tile tile-interactive" onClick={() => onOpenWork(latest)}><span className="tile-label">最近发布</span><WorkCard work={latest} /><span className="tile-hint">查看这条作品</span></button>}
+      <section className="moments-board"><p className="eyebrow">今天值得记住</p>{feedback.slice(0, 2).map(item => <article className="moment tile-interactive" key={item.id}><span>{item.type}</span><p>{item.content}</p></article>)}</section>
+    </section>
+    <aside className="dashboard-rail">
+      <article className="clock-widget tile-interactive"><span>创作时间</span><strong>20:26</strong><small>留给自己的十分钟</small></article>
+      <article className="calendar-widget tile-interactive"><p>2026 / 08</p><div className="week-row"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div><div className="date-grid">{Array.from({ length: 31 }, (_, index) => <span className={index === 26 ? 'today' : ''} key={index}>{index + 1}</span>)}</div></article>
+      <article className="metric-widget tile-interactive"><p>这个月</p><div><strong>{works.length}</strong><span>条作品</span></div><div><strong>{number(totalLikes)}</strong><span>个喜欢</span></div><div><strong>{feedback.length}</strong><span>次收藏</span></div></article>
+    </aside>
+  </div>
 }
 
 function Works({ works, onAdd, onOpenWork }: { works: Work[]; onAdd: () => void; onOpenWork: (work: Work) => void }) {
