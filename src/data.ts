@@ -15,5 +15,5 @@ export const initialFeedback: FeedbackEvent[] = [
 
 export const initialPosts: Post[] = [
   { id: 'p1', author: '西西的放映室', avatar: '西', content: '最近决定不追每一条的数据了。把评论区里真正打动我的话，认真存下来。', createdAt: '2小时前', likes: 128, liked: false, comments: ['这个习惯真好', '我也准备试试'] },
-  { id: 'p2', author: '阿桃在记录', avatar: '桃', content: '今天终于发出了拖了两周的视频。它也许不会爆，但它是完整的。', image: '窗边', createdAt: '昨天', likes: 236, liked: false, comments: ['完整比完美重要', '恭喜发出！'] },
+  { id: 'p2', author: '阿桃在记录', avatar: '桃', content: '今天终于发出了拖了两周的视频。它也许不会爆，但它是完整的。', imageCaption: '窗边', createdAt: '昨天', likes: 236, liked: false, comments: ['完整比完美重要', '恭喜发出！'] },
 ]

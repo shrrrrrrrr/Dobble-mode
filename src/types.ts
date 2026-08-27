@@ -7,6 +7,7 @@ export interface Work {
   platform: Platform
   publishedAt: string
   cover: string
+  coverImage?: string
   plays: number
   likes: number
   comments: number
@@ -30,6 +31,7 @@ export interface Post {
   avatar: string
   content: string
   image?: string
+  imageCaption?: string
   createdAt: string
   likes: number
   liked: boolean
