@@ -22,7 +22,33 @@ function loadState(userId: string): AppState {
 }
 
 const number = (value: number) => new Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 1 }).format(value)
-const today = new Date().toISOString().slice(0, 10)
+
+function localDateString(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function getRecentSevenDays(reference = new Date()) {
+  const end = new Date(reference)
+  end.setHours(0, 0, 0, 0)
+  const start = new Date(end)
+  start.setDate(start.getDate() - 6)
+  return { start: localDateString(start), end: localDateString(end) }
+}
+
+function isInRecentSevenDays(date: string, window = getRecentSevenDays()) {
+  return date >= window.start && date <= window.end
+}
+
+const today = localDateString(new Date())
+const todayLabel = (() => {
+  const date = new Date()
+  const weekdays = ['日', '一', '二', '三', '四', '五', '六']
+  return `${date.getMonth() + 1} 月 ${date.getDate()} 日，星期${weekdays[date.getDay()]}`
+})()
+const currentTime = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date())
 
 export default function App() {
   const [state, setState] = useState<AppState>(emptyState)
@@ -59,15 +85,21 @@ export default function App() {
   useEffect(() => { getSession().then(savedSession => { setSession(savedSession); setSessionReady(true) }) }, [])
 
   const memories = useMemo(() => {
-    const highlighted = state.works.slice().sort((a: Work, b: Work) => (b.likes + b.favorites) - (a.likes + a.favorites)).slice(0, 2)
+    const recentWindow = getRecentSevenDays()
+    const recentWorks = state.works.filter(work => isInRecentSevenDays(work.publishedAt, recentWindow))
+    const highlighted = recentWorks.slice().sort((a: Work, b: Work) => (b.likes + b.favorites) - (a.likes + a.favorites)).slice(0, 2)
     return highlighted.map((work: Work, index: number) => ({
       id: work.id,
-      label: index === 0 ? '这个月被好好接住的一条作品' : '一段值得回头看的创作日常',
+      label: index === 0 ? '这七天被好好接住的一条作品' : '一段值得回头看的创作日常',
       title: work.title,
       detail: `${work.platform} · ${number(work.likes)} 个赞 · ${work.comments} 条留言`,
       note: work.note,
     }))
   }, [state.works])
+
+  const recentWindow = getRecentSevenDays()
+  const recentWorks = state.works.filter(work => isInRecentSevenDays(work.publishedAt, recentWindow))
+  const recentFeedback = state.feedback.filter(item => isInRecentSevenDays(item.createdAt, recentWindow))
 
   async function saveWork(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -194,10 +226,10 @@ export default function App() {
     <section className="mobile-frame" ref={frameRef}>
       <header className="topbar"><span className="brand">留白</span><span className="mode-pill">生活模式</span><div className="account-summary"><span>{session.username}</span><button onClick={handleSignOut}>退出</button></div></header>
       <div className="content">
-        {selectedRecap ? <WeeklyRecap works={state.works} feedback={state.feedback} onClose={() => setSelectedRecap(false)} /> : selectedWork ? <WorkDetail work={selectedWork} feedback={state.feedback.filter((item: FeedbackEvent) => item.workId === selectedWork.id)} onClose={() => setSelectedWork(null)} onSaveNote={updateNote} onFeedback={addFeedback} /> : <>
-          {tab === 'home' && <Home profile={state.profile} works={state.works} feedback={state.feedback} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} onNavigate={nextTab => { setTab(nextTab); if (nextTab === 'community') setCommunityView('feed') }} onOpenProfile={() => { setTab('community'); setCommunityView('profile') }} />}
+        {selectedRecap ? <WeeklyRecap works={recentWorks} feedback={recentFeedback} onClose={() => setSelectedRecap(false)} /> : selectedWork ? <WorkDetail work={selectedWork} feedback={state.feedback.filter((item: FeedbackEvent) => item.workId === selectedWork.id)} onClose={() => setSelectedWork(null)} onSaveNote={updateNote} onFeedback={addFeedback} /> : <>
+          {tab === 'home' && <Home profile={state.profile} works={recentWorks} feedback={recentFeedback} dateLabel={todayLabel} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} onNavigate={nextTab => { setTab(nextTab); if (nextTab === 'community') setCommunityView('feed') }} onOpenProfile={() => { setTab('community'); setCommunityView('profile') }} />}
           {tab === 'works' && <Works works={state.works} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} />}
-          {tab === 'memories' && <Memories memories={memories} works={state.works} onOpenRecap={() => setSelectedRecap(true)} />}
+          {tab === 'memories' && <Memories memories={memories} works={recentWorks} onOpenRecap={() => setSelectedRecap(true)} />}
           {tab === 'community' && <Community view={communityView} profile={state.profile} posts={state.posts} onAdd={() => setShowPostForm(true)} onLike={toggleLike} onComment={addComment} onViewChange={setCommunityView} onEditProfile={() => setShowProfileForm(true)} />}
         </>}
       </div>
@@ -234,7 +266,7 @@ function LocalAuthPage({ onAuthenticated }: { onAuthenticated: (session: AppSess
   return <main className="auth-shell"><section className="auth-card"><div className="auth-sticker">留</div><p className="eyebrow">创作生活</p><h1>{registering ? <>创建你的<br />创作桌面。</> : <>先把你自己<br />带进来。</>}</h1><p className="auth-copy">账号仅保存在当前设备。作品、回忆和社区记录会按账号分别保存。</p><form className="auth-form" onSubmit={submit}><label>账号<input value={username} onChange={event => setUsername(event.target.value)} placeholder="3–20 位字母、数字、下划线或短横线" maxLength={20} required autoFocus /></label><label>密码<input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="至少 6 位" minLength={6} required /></label><button className="primary" disabled={loading}>{loading ? '处理中...' : registering ? '创建并进入' : '进入创作桌面'}</button></form><button className="text-action auth-switch" onClick={() => { setRegistering(value => !value); setMessage('') }}>{registering ? '已有账号？直接登录' : '第一次来？创建本地账号'}</button><p className="auth-message">{message}</p><p className="auth-preview">当前为本地账号体验，不连接云端。若设备上有旧版数据，登录后可选择导入。</p></section></main>
 }
 
-function Home({ profile, works, feedback, onAdd, onOpenWork, onNavigate, onOpenProfile }: { profile: UserProfile; works: Work[]; feedback: FeedbackEvent[]; onAdd: () => void; onOpenWork: (work: Work) => void; onNavigate: (tab: Tab) => void; onOpenProfile: () => void }) {
+function Home({ profile, works, feedback, dateLabel, onAdd, onOpenWork, onNavigate, onOpenProfile }: { profile: UserProfile; works: Work[]; feedback: FeedbackEvent[]; dateLabel: string; onAdd: () => void; onOpenWork: (work: Work) => void; onNavigate: (tab: Tab) => void; onOpenProfile: () => void }) {
   const totalLikes = works.reduce((sum, work) => sum + work.likes, 0)
   const latest = works[0]
   return <div className="studio-layout">
@@ -249,14 +281,14 @@ function Home({ profile, works, feedback, onAdd, onOpenWork, onNavigate, onOpenP
       <button className="aside-note tile-interactive" onClick={onOpenProfile}>我的徽章与发帖</button>
     </aside>
     <section className="studio-stage">
-      <section className="hero studio-hero"><p className="eyebrow">八月 27 日，星期四</p><h1>把创作过成<br />自己的生活。</h1><p>不用急着解释数据，先把每一次认真留下来。</p><button className="primary tile-interactive" onClick={onAdd}>记录新作品</button></section>
+      <section className="hero studio-hero"><p className="eyebrow">{dateLabel}</p><h1>把创作过成<br />自己的生活。</h1><p>不用急着解释数据，先把每一次认真留下来。</p><button className="primary tile-interactive" onClick={onAdd}>记录新作品</button></section>
       {latest && <button className="latest-tile tile-interactive" onClick={() => onOpenWork(latest)}><span className="tile-label">最近发布</span><WorkCard work={latest} /><span className="tile-hint">查看这条作品</span></button>}
-      <section className="moments-board"><p className="eyebrow">今天值得记住</p>{feedback.slice(0, 2).map(item => <article className="moment tile-interactive" key={item.id}><span>{item.type}</span><p>{item.content}</p></article>)}</section>
+      <section className="moments-board"><p className="eyebrow">最近七天值得记住</p>{feedback.length ? feedback.slice(0, 2).map(item => <article className="moment tile-interactive" key={item.id}><span>{item.type}</span><p>{item.content}</p></article>) : <p className="empty">这七天还没有收藏的时刻。记录一条作品，或给自己留句话。</p>}</section>
     </section>
     <aside className="dashboard-rail">
       <article className="clock-widget tile-interactive"><span>创作时间</span><strong>20:26</strong><small>留给自己的十分钟</small></article>
       <article className="calendar-widget tile-interactive"><p>2026 / 08</p><div className="week-row"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div><div className="date-grid">{Array.from({ length: 31 }, (_, index) => <span className={index === 26 ? 'today' : ''} key={index}>{index + 1}</span>)}</div></article>
-      <article className="metric-widget tile-interactive"><p>这个月</p><div><strong>{works.length}</strong><span>条作品</span></div><div><strong>{number(totalLikes)}</strong><span>个喜欢</span></div><div><strong>{feedback.length}</strong><span>次收藏</span></div></article>
+      <article className="metric-widget tile-interactive"><p>最近七天</p><div><strong>{works.length}</strong><span>条作品</span></div><div><strong>{number(totalLikes)}</strong><span>个喜欢</span></div><div><strong>{feedback.length}</strong><span>次收藏</span></div></article>
     </aside>
   </div>
 }
@@ -267,7 +299,7 @@ function Works({ works, onAdd, onOpenWork }: { works: Work[]; onAdd: () => void;
 
 function WorkCard({ work }: { work: Work }) { return <article className={`work-card cover-${work.id.slice(-1)}`}><div className="cover">{work.coverImage ? <img src={work.coverImage} alt={`${work.title}封面`} /> : <span>{work.cover}</span>}<small>{work.platform}</small></div><div className="work-copy"><h3>{work.title}</h3><p>{work.publishedAt} · {number(work.plays)} 次观看</p><div className="work-metrics"><span>{number(work.likes)} 赞</span><span>{work.comments} 评论</span><span>{number(work.favorites)} 收藏</span></div>{work.note && <em>“{work.note}”</em>}</div></article> }
 
-function Memories({ memories, works, onOpenRecap }: { memories: { id: string; label: string; title: string; detail: string; note: string }[]; works: Work[]; onOpenRecap: () => void }) { return <><section className="page-head memories-head"><p className="eyebrow">短期回看</p><h1>这一周，<br />你留下些什么？</h1><p>回看不必等到年末。它会收起这一周的作品、感受和反馈。</p><button className="primary recap-entry" onClick={onOpenRecap}>打开本周回看</button></section><div className="memory-stack">{memories.map((memory, index) => <article className={`memory-card memory-${index}`} key={memory.id}><p>{memory.label}</p><h2>{memory.title}</h2><span>{memory.detail}</span><blockquote>{memory.note || '这一刻，值得被收起来。'}</blockquote></article>)}</div><p className="small-note">基于 {works.length} 条作品与创作记录生成</p></> }
+function Memories({ memories, works, onOpenRecap }: { memories: { id: string; label: string; title: string; detail: string; note: string }[]; works: Work[]; onOpenRecap: () => void }) { return <><section className="page-head memories-head"><p className="eyebrow">短期回看</p><h1>这一周，<br />你留下些什么？</h1><p>回看不必等到年末。它会收起最近七天的作品、感受和反馈。</p><button className="primary recap-entry" onClick={onOpenRecap}>打开本周回看</button></section>{memories.length ? <div className="memory-stack">{memories.map((memory, index) => <article className={`memory-card memory-${index}`} key={memory.id}><p>{memory.label}</p><h2>{memory.title}</h2><span>{memory.detail}</span><blockquote>{memory.note || '这一刻，值得被收起来。'}</blockquote></article>)}</div> : <section className="empty memory-empty"><p>最近七天还没有作品回忆。</p><span>记录一条作品后，这里会为你整理本周值得回看的片段。</span></section>}<p className="small-note">基于最近七天的 {works.length} 条作品与创作记录生成</p></> }
 
 function Community({ view, profile, posts, onAdd, onLike, onComment, onViewChange, onEditProfile }: { view: 'feed' | 'profile'; profile: UserProfile; posts: Post[]; onAdd: () => void; onLike: (id: string) => void; onComment: (id: string, comment: string) => void; onViewChange: (view: 'feed' | 'profile') => void; onEditProfile: () => void }) {
   const [replyingTo, setReplyingTo] = useState<string | null>(null)
@@ -289,13 +321,17 @@ function WorkDetail({ work, feedback, onClose, onSaveNote, onFeedback }: { work:
 
 function WeeklyRecap({ works, feedback, onClose }: { works: Work[]; feedback: FeedbackEvent[]; onClose: () => void }) {
   const [page, setPage] = useState(0)
-  const recent = works.slice(0, 3)
-  const favorite = works.slice().sort((a, b) => b.likes - a.likes)[0]
-  const slides = [
+  const recentWindow = getRecentSevenDays()
+  const recent = works.filter(work => isInRecentSevenDays(work.publishedAt, recentWindow)).slice(0, 3)
+  const recentFeedback = feedback.filter(item => isInRecentSevenDays(item.createdAt, recentWindow))
+  const favorite = recent.slice().sort((a, b) => b.likes - a.likes)[0]
+  const slides = recent.length ? [
     <><p className="eyebrow">本周创作回看</p><h1>这七天，<br />你没有白过。</h1><strong className="recap-number">{recent.length}</strong><p>条作品被认真留了下来。</p></>,
     <><p className="eyebrow">被更多人看见</p><h1>《{favorite?.title ?? '你的作品'}》</h1><strong className="recap-number">{number(favorite?.likes ?? 0)}</strong><p>个喜欢，是这周最明亮的回应。</p></>,
     <><p className="eyebrow">你当时写下</p><blockquote className="recap-quote">“{recent[0]?.note || '把这一周的感受，留给下一次自己。'}”</blockquote><p>不止数据，你也记住了那个时刻的自己。</p></>,
-    <><p className="eyebrow">收下这些声音</p><h1>本周有 {feedback.length} 个<br />值得收藏的时刻。</h1><p>{feedback[0]?.content || '下一周，也继续为自己留下一个时刻。'}</p></>,
+    <><p className="eyebrow">收下这些声音</p><h1>本周有 {recentFeedback.length} 个<br />值得收藏的时刻。</h1><p>{recentFeedback[0]?.content || '下一周，也继续为自己留下一个时刻。'}</p></>,
+  ] : [
+    <><p className="eyebrow">本周创作回看</p><h1>最近七天，<br />还没有作品记录。</h1><p>下一次记录作品时，这里会帮你收起当时的感受、数据和回应。</p></>,
   ]
-  return <section className="weekly-recap"><button className="back-link" onClick={onClose}>返回回忆</button><div className={`recap-slide recap-slide-${page}`} key={page}>{slides[page]}</div><div className="recap-progress">{slides.map((_, index) => <span className={index === page ? 'active' : ''} key={index} />)}</div><button className="primary recap-next" onClick={() => setPage(page === slides.length - 1 ? 0 : page + 1)}>{page === slides.length - 1 ? '重新播放' : '下一页'}</button></section>
+  return <section className="weekly-recap"><button className="back-link" onClick={onClose}>返回回忆</button><div className={`recap-slide recap-slide-${page}`} key={page}>{slides[page]}</div><div className="recap-progress">{slides.map((_, index) => <span className={index === page ? 'active' : ''} key={index} />)}</div><button className="primary recap-next" onClick={() => { if (slides.length === 1) { onClose() } else { setPage(page === slides.length - 1 ? 0 : page + 1) } }}>{slides.length === 1 ? '返回回忆' : page === slides.length - 1 ? '重新播放' : '下一页'}</button></section>
 }

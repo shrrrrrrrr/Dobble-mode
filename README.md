@@ -2,7 +2,7 @@
 
 面向内容创作者的生活模式原型。记录作品、过程感受与值得记住的反馈，并整理成短期回看。
 
-当前版本：**V1.3**（本地账号 + 按账号隔离数据）
+当前版本：**V1.4**（最近七天回看 + 本地账号）
 
 仓库：[github.com/shrrrrrrrr/Dobble-mode](https://github.com/shrrrrrrrr/Dobble-mode)
 
@@ -22,7 +22,7 @@ npm run build
 npm run preview
 ```
 
-验收脚本（V1.3）：
+验收脚本：
 
 ```bash
 npm run verify
@@ -70,5 +70,5 @@ docs/
 ## 开发约定
 
 - 主分支：`master`
-- 版本标签：`v1.0.0`、`v1.3.0` 等，见 [docs/ROADMAP.md](docs/ROADMAP.md)
+- 版本标签：`v1.0.0`、`v1.3.0`、`v1.4.0` 等，见 [docs/ROADMAP.md](docs/ROADMAP.md)
 - 专业模式参考仓库 [creator-topic-library](https://github.com/shrrrrrrrr/creator-topic-library)，不作为本仓库推送目标
