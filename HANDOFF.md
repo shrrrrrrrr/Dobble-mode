@@ -10,9 +10,9 @@
 
 产品的母结构已经形成：**双模式 + 共享社区 + 统一 AI 角色**。其中，生活模式与专业模式不是两个不相干的 App，而是面对同一创作者的两种使用状态。生活模式帮助用户记录作品、数据、感受、反馈与短期回看，强调陪伴和情绪价值；专业模式未来借鉴一个既有选题管理 Web，重点是选题、评分、创作流程与复盘分析，强调数据本身加分析。社区位于共享层；个人主页位于社区内部，不是底部一级导航。
 
-当前产品阶段是：生活模式 V1 已完成多轮交互与视觉迭代，V1.1 已加入本地图片、资料编辑与“本周回看”，V1.2 已加入邮箱验证码登录的前端基础和 Supabase 数据模型草案。真正的云端数据同步、真实邮件服务、移动端安装包、专业模式均未完成。
+当前产品阶段是：生活模式 V1 已完成多轮交互与视觉迭代，V1.1 已加入本地图片、资料编辑与“本周回看”，V1.2 已加入邮箱验证码登录的前端基础。Supabase 项目“**双模**”现已实际创建并完成初始数据库、RLS、私有媒体桶、六码 OTP 设置和本地回跳地址配置；但 App 尚未写入连接信息，也尚未把资料、作品或社区数据同步到云端。移动端安装包、专业模式、真实多用户数据流均未完成。
 
-当前用户最新明确方向是：先使用邮箱验证码登录；最终移动端可能改为手机号验证码或免登录。用户要求当前版本的底部栏更不透明，部分字体加粗；这些已落实在本地代码。随后用户要求先做完整交接，准备结束本对话并转到新 AI 对话继续。
+认证方案正在重新讨论：用户最初明确选择邮箱验证码，随后询问能否改为“免邮箱、直接账号密码注册/登录”。AI 已说明 Supabase 原生密码身份只支持邮箱或手机号，任意账号名需要额外设计；用户**尚未确认**是否正式切换。因此当前有效代码仍是邮箱 OTP 本地预览，不能把“账号密码登录”写成已决定或已实现。
 
 ## 2. Project Overview
 
@@ -211,7 +211,7 @@
 - 数据持久化：当前主要为浏览器 LocalStorage，键名为 `creator-life-v1`。
 - 图片处理：`src/utils/image.ts` 使用浏览器 FileReader/Canvas 将图片压缩为 JPEG Data URL。
 - 认证 SDK：已安装 `@supabase/supabase-js` 2.57.4。
-- 拟定后端：Supabase Auth + PostgreSQL + Storage；仅完成前端认证适配层、SQL 草案和配置说明，未完成实际数据连接。
+- 后端方向：Supabase Auth + PostgreSQL + Storage。项目基础资源已实际配置，但前端仍未连接、没有 Repository 数据层或真实同步。
 
 ### 7.2 当前代码结构
 
@@ -232,7 +232,7 @@
     MEMORY_REPORT_TODO.md      短期回看设计清单，部分内容已过时
     THEME_PACKS.md             主题包预留说明
   supabase/migrations/
-    0001_life_mode.sql         数据库表与 RLS 策略草案
+    0001_life_mode.sql         已在“双模”项目执行的初始 schema、RLS、触发器与 Storage policy
   .env.example                 Supabase 前端公开环境变量模板
   README.md                    早期 V1 运行说明，未完全同步 V1.1/V1.2 状态
   创作者生活模式App_PRD_v1.0.docx  已生成的 V1 PRD Word 文档
@@ -240,9 +240,9 @@
 
 `src/App.tsx` 目前集中承载太多责任：登录门控、所有页面、表单、局部状态、LocalStorage 写入、角色拖动、回看等。对当前 MVP 有利于快速迭代，但云端同步和专业模式到来前必须逐步拆分成页面、领域 hooks/服务和复用组件。不要为了拆分而做大规模纯重构；先在新增真实数据层或新功能时按边界拆。
 
-### 7.3 登录：当前实现与真实状态
+### 7.3 登录：当前代码、云端配置与待决方向
 
-用户已确认当前阶段先用“邮箱验证码登录”。
+当前源代码实现的仍是“邮箱验证码登录”。此前用户已确认过该方向，但最近已提出“免邮箱、账号密码注册/登录”的替代想法；尚无最终确认，不能擅自切换实现。
 
 `src/services/auth.ts` 的行为：
 
@@ -250,22 +250,26 @@
 2. 未配置上述环境变量时，使用本地开发预览：验证码固定为 `123456`，会把 `{ userId, email, provider: 'local-preview' }` 存入 LocalStorage 键 `creator-life-auth-session`。
 3. `App.tsx` 首次加载会调用 `getSession`；无会话显示 `EmailAuthPage`，有会话显示应用并在顶部展示邮箱与退出按钮。
 
-当前浏览器预览流程已手工验证：邮箱输入 -> 获取验证码 -> 本地提示/输入 `123456` -> 进入应用 -> 顶部显示邮箱 -> 退出。**未配置 Supabase 时绝不会发送真实邮件。**UI 已明确提示“当前为本地开发预览，未配置真实邮件服务”。不要在任何测试或汇报中把它说成真实邮件登录已上线。
+当前浏览器预览流程已手工验证：邮箱输入 -> 获取验证码 -> 本地提示/输入 `123456` -> 进入应用 -> 顶部显示邮箱 -> 退出。当前工作区**没有** `.env.local`，所以运行中的 App 仍处于本地预览模式，绝不会发送真实邮件。UI 已明确提示“当前为本地开发预览，未配置真实邮件服务”。不要在任何测试或汇报中把它说成真实邮件登录已上线。
 
-最终移动端认证仍是未来问题：用户倾向手机号验证码或免登录，但没有确定具体认证供应商、号码合规、游客转正策略或迁移流程。当前邮箱方案不应被擅自替换。
+云端项目内，Email provider、新用户注册与 Confirm email 已启用；Email OTP 长度已由默认 8 位实际修改为 **6 位**，以匹配现有登录页的 6 位输入限制。项目的 Site URL 与 Redirect URL 均已配置为 `http://localhost:5173`。
 
-### 7.4 拟定 Supabase 数据模型
+真实 OTP 邮件目前仍不可用，原因不是数据库而是邮件模板：Supabase 默认“Magic link or OTP”模板实际使用 `{{ .ConfirmationURL }}`，即点击登录链接；默认发信服务不能编辑模板。要让现有 `verifyOtp` 代码收到六位验证码，必须配置自定义 SMTP 后将模板改用 `{{ .Token }}`。此 SMTP 尚未配置，不能填入虚构凭据或把 App 连接到一个会发送魔法链接但 UI 要求验证码的 Auth 项目。
 
-迁移文件 `supabase/migrations/0001_life_mode.sql` 定义：
+“账号密码、无邮箱”方案的事实边界：Supabase 原生密码登录以邮箱或手机号为身份；若 UI 要用任意账号名，必须选择以下其一：a) 设计受限的内部映射身份并接受无密码找回的代价；b) 新建自有认证服务并安全管理密码哈希、会话与 Supabase JWT；c) 改用手机号+密码并另行处理短信验证/号码回收风险。三者均未获用户确认。
 
-- `profiles`：`auth.users` 一对一的昵称、头像路径、创建/更新时间。
+### 7.4 已执行的 Supabase 数据模型
+
+迁移文件 `supabase/migrations/0001_life_mode.sql` 已于本次对话通过“双模”Supabase 项目的 SQL Editor 成功执行，且本地同名文件已同步更新。它定义：
+
+- `profiles`：`auth.users` 一对一的昵称、头像路径、创建/更新时间；公开可读，只有本人可插入/更新。
 - `works`：私有作品，含平台约束、指标、便签、心情。
 - `feedback_events`：私有反馈事件，关联 `works`。
 - `community_posts`：关联用户的公开文字、图片路径/图片说明。
 - `community_comments`：公开可读的评论。
 - `community_likes`：帖与用户的联合主键，避免同用户重复点赞。
 
-迁移启用了 RLS。资料、作品、反馈的读写仅限拥有者；帖子、评论、点赞可公开读取，插入需为本人。帖子目前有 owner 的更新/删除；评论与点赞尚没有更新/删除策略。数据库表与当前本地 TypeScript 数据不完全一一对应，例如本地社区帖子按昵称/数组评论建模、云端需要 `user_id` 与关系查询。这是预期中的下一阶段改造点。
+迁移启用了 RLS。作品、反馈读写仅限拥有者；资料公开可读但仅本人可写；帖子、评论、点赞可公开读取，插入需为本人；帖子有 owner 的更新/删除，评论与点赞尚没有更新/删除策略。迁移还启用了 `pgcrypto`、创建 `handle_new_user` trigger（新 Auth 用户自动拥有 profile）和 profiles 的 `updated_at` trigger。数据库表与当前本地 TypeScript 数据不完全一一对应，例如本地社区帖子按昵称/数组评论建模、云端需要 `user_id` 与关系查询。这是预期中的下一阶段改造点。
 
 ### 7.5 Storage 和环境变量
 
@@ -276,26 +280,26 @@ VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
 ```
 
-`docs/SUPABASE_SETUP.md` 要求创建私有 bucket `creator-media`，并为仅本人上传、读取自己的私有文件配置策略；还要求配置 Auth Redirect URLs。迁移文件**没有**创建 bucket 或 Storage policy，这项必须手工完成或补充可审计迁移后才可上线。不要把任何服务端私钥放进 Vite 前端环境变量；Anon Key 是公开前端配置的一部分，Service Role Key 绝不能进入客户端。
+“双模”项目已存在私有 bucket `creator-media`；迁移为 `storage.objects` 添加了按第一层目录等于 `auth.uid()` 的本人读、写、更新、删除策略。今后上传私有作品/资料媒体必须采用 `{auth.uid()}/{filename}` 的对象路径，否则会被策略拒绝。社区图片的公共访问策略尚未设计；不要为了展示帖子图片而把整个私有 bucket 改公开。更合理的未来做法是单独公共社区桶，或使用受控的签名 URL。不要把任何服务端私钥放进 Vite 前端环境变量；Anon Key 是公开前端配置的一部分，Service Role Key 绝不能进入客户端。
+
+`docs/SUPABASE_SETUP.md` 现在有部分过时：它仍把创建项目、bucket、RLS 和 redirect URLs 写成待办，且未说明默认邮件模板不能直接变为 OTP。下次整理云端功能时应更新它，但不能把它视为当前云端状态。
 
 ## 8. Repository, Git and Deployment
 
 ### 8.1 仓库现状：已确认
 
 - 本地工作目录：`C:\Users\shr\Desktop\像小学期`
-- GitHub remote：`https://github.com/shrrrrrrrr/creator-topic-library.git`
-- remote 名称：`origin`
-- 当前本地分支：`master`
-- 目标远端分支：`life-mode-v1`
-- 最新本地提交：`d81ca17 feat: add email otp auth foundation`
-- 当前远端 `origin/life-mode-v1`：`9bb5fff fix: refine life mode interactions`
-- 当前 `git status --short` 为空，交接时工作区干净。
+- 当前唯一代码仓库：`https://github.com/shrrrrrrrr/Dobble-mode.git`，本地 `origin` 已在本次交接更新前核验为该地址。
+- 旧参考仓库：`https://github.com/shrrrrrrrr/creator-topic-library.git`，其既有代码保持不变，不再承载本项目后续代码。
+- 当前本地分支：交接时为 `master`；新仓库的 remote 配置、默认分支和是否已完成首次推送均应在接手时重新检查，本文不作推测。
+- 最新已提交本地提交：`a1db063 docs: add project handoff`。
+- 当前工作区有两项未提交修改：`HANDOFF.md`（持续更新交接）与 `supabase/migrations/0001_life_mode.sql`（已执行的云端 schema/策略增强）。不要丢弃或用 checkout/revert 清除它们。
 
-这个远端原本是专业模式参考 Web 的仓库。为了不破坏原有专业 Web，生活模式新实现被推送到单独的 `life-mode-v1` 分支，而不是覆盖原始分支。当前本地 `master` 追踪/使用这个远端分支的方式不常见，推送时需明确目标分支，例如 `git push origin HEAD:life-mode-v1`。
+用户已在本次交接后将代码仓库改为 `Dobble-mode`：现在及之后的所有本项目代码都应放入该仓库。`creator-topic-library` 保持原样，只供未来专业模式研究和参考，绝不可再向其推送本项目的新代码或改动其历史。由于仓库迁移发生在本工作区状态核对之后，当前本地 `origin` 是否已改指向新仓库、`Dobble-mode` 的默认分支是什么、哪些本地提交是否已被推送，均为 **Unknown / 需要重新核对**。
 
 ### 8.2 本地已提交、但尚未推送的提交
 
-以下提交在本地存在，远端目前未确认收到：
+以下实现提交在本地历史中存在；在切换到 `Dobble-mode` 前，它们尚未成功推送至旧仓库，因此应作为需要推入新代码仓库的本地历史处理。`a1db063` 之后的当前 Supabase migration 与 HANDOFF 更新尚未提交：
 
 ```text
 6a22ff6 feat: refresh theme and tighten life mode flow
@@ -306,9 +310,9 @@ b3d4b4c fix: keep navigation dock fixed
 d81ca17 feat: add email otp auth foundation
 ```
 
-之前 `fb0c67c`（初始生活模式 V1）和 `9bb5fff`（第一轮交互修复）已成功推送至 `life-mode-v1`。此后多次 push 受到本机/网络证书链问题影响，出现 self-signed certificate in certificate chain / `SEC_E_UNTRUSTED_ROOT`，即使用过 `http.sslVerify=false` 也未真正解决，终端有时会误显示“Everything up-to-date”。曾用远端查询确认 remote 仍为 `9bb5fff`。因此不可宣称最新版本已上传 GitHub。
+历史上，`fb0c67c`（初始生活模式 V1）和 `9bb5fff`（第一轮交互修复）曾成功推送至旧仓库的 `life-mode-v1` 分支。其后多次向旧仓库 push 受到本机/网络证书链问题影响，出现 self-signed certificate in certificate chain / `SEC_E_UNTRUSTED_ROOT`，即使用过 `http.sslVerify=false` 也未真正解决，终端有时会误显示“Everything up-to-date”。这是旧仓库同步的历史状态，不能据此判断新仓库 `Dobble-mode` 的状态，也不可宣称新仓库已拥有任何提交。
 
-建议新 AI 在用户允许的前提下先运行远端查询确认状态，再由用户修复可信证书、代理或网络环境后推送。不要通过全局关闭 Git SSL 校验来“永久解决”问题，也不要反复盲目尝试 push 后假设成功。
+建议新 AI 在用户允许的前提下先检查 `origin` 是否已指向 `Dobble-mode`、新仓库的默认分支和远端提交，再处理证书、代理或网络问题并推送。不要通过全局关闭 Git SSL 校验来“永久解决”问题，也不要反复盲目尝试 push 后假设成功。
 
 ### 8.3 部署和原生包：尚未确认/未实现
 
@@ -337,12 +341,14 @@ d81ca17 feat: add email otp auth foundation
 - 可拖动并受边界限制的“留”，可点击开关随动对话面板，规则型回答。
 - 参考 `lvyovo-wiki.tech` 气质的非对称桌面布局、圆润字体和 hover/active 微交互。
 - 主题变量和一套默认主题元数据预留。
-- Supabase SQL 数据模型/RLS 初稿及配置说明文档。
+- “双模”Supabase 项目已创建：六张业务表、RLS、用户 profile 自动创建 trigger、`creator-media` 私有 bucket 及按用户目录限制的 Storage policy 已实际运行。
+- “双模”Supabase Auth 已启用 Email provider、新用户注册和 Confirm email；六码 OTP、`http://localhost:5173` 的 Site URL 与允许跳转 URL 已实际保存。
+- `npm run build` 在本次 Supabase schema 更新后通过。
 
 ### 部分实现或仅有基础
 
-- 邮箱认证：在没有环境变量时只是固定验证码本地预览；接真实 Supabase 后才是实际邮箱 OTP。
-- Supabase：只有 schema、RLS 草案、文档和 Auth SDK。作品、资料、帖子、图片并未读写 Supabase。
+- 邮箱认证：在没有环境变量时只是固定验证码本地预览；真实 Supabase 项目虽已配置，但默认邮件仍为 Magic link，未接 SMTP/OTP 模板，且工作区尚无 `.env.local`，所以不能启用真实 Auth。
+- Supabase：数据库、RLS、Auth 基础和私有 Storage 已就绪；作品、资料、帖子、图片仍未从 UI 读写 Supabase。
 - 图片能力：已本地压缩，但没有对象存储上传、删除、缩略图策略或浏览器存储配额保护。
 - 回看：有可点、可翻页的 demo，但周期过滤、完整叙事/动效、可分享产物和产品文案尚不完整。
 - AI：有角色交互和规则回答，不是 LLM/Agent。
@@ -351,9 +357,9 @@ d81ca17 feat: add email otp auth foundation
 
 ### 尚未实现
 
-- 真实 Supabase 项目配置、真实邮件 OTP 配置与验收。
+- 真实 OTP 邮件的 SMTP、模板、发件域名与验收，或用户最终确认另一种认证方案。
 - 本地数据向云端数据迁移和实时/刷新同步。
-- Supabase Storage bucket、上传、访问控制、图片清理策略。
+- Supabase Storage 的前端上传、私有路径使用、图片清理策略，以及社区公共图片的独立存储/访问设计。
 - 稳定 user id 贯穿社区、资料和私有数据。
 - 后端 API/Repository 层、错误恢复、离线策略、数据备份。
 - 专业模式 UI、选题库/评分/复盘的迁移整合。
@@ -392,9 +398,13 @@ d81ca17 feat: add email otp auth foundation
 
 加入图片压缩、本地头像/昵称编辑、作品与社区真实选择图片、初版“本周回看”。这使作品、个人资料、社区图片不再都是纯视觉占位，但数据仍停留在当前浏览器。
 
-### V1.2 认证基础：`d81ca17`（当前本地 HEAD）
+### V1.2 认证基础：`d81ca17`（最新应用功能提交）
 
 用户选择先做邮箱验证码。新增本地预览验证码与可选 Supabase OTP 登录适配、`.env.example`、Supabase SQL 迁移草案和配置文档；底栏透明度和字重也已按用户要求调整。真实云端没有接通，本地提交尚未成功推送。
+
+### V1.2 后续云端基础配置：未单独编号、尚未提交
+
+用户创建了 Supabase 项目 ref `zsrhgtplolhxrbzxwfkq`，组织/项目工作区标识为“**双模**”。在该项目中实际执行了增强后的迁移：六张表、RLS、`pgcrypto`、Auth 用户自动 profile trigger、`updated_at` trigger、`creator-media` 私有 bucket 和四项 owner-only Storage policy。Email provider 保持启用，Confirm email 保持启用，OTP 长度改为 6，Site/Redirect URL 指向 `http://localhost:5173`。随后发现免费默认邮件模板是 Magic link 且不能编辑；若坚持 OTP 需自定义 SMTP。此阶段尚未写入 `.env.local`，尚未迁移 UI 数据，且 migration/HANDOFF 修改尚未提交。
 
 ## 11. Decision Log
 
@@ -514,15 +524,35 @@ d81ca17 feat: add email otp auth foundation
 
 **理由：** 用户希望以后在已有网页结构基础上更换颜色、贴图等，不能为主题拆出不同产品结构。当前优先产品功能和云端基础。
 
-### Decision 13：认证先邮箱验证码，未来再考虑手机或免登录
+### Decision 13：认证先做邮箱验证码，后来进入重新评估
 
 **问题：** V1.2 账号入口选择。
 
-**当前决定：** 现在先邮箱验证码。最终移动端可能用手机号登录或免登录。
+**早期决定：** 现在先邮箱验证码。最终移动端可能用手机号登录或免登录。
 
 **理由：** 邮箱 OTP 更快建立账户/云同步基础，手机号与免登录牵涉移动端平台、隐私、合规和迁移策略，尚未设计。
 
-**限制：** 当前没有 Supabase 配置时只提供 `123456` 的本地预览，不能当作生产认证。
+**当前实现限制：** 当前没有 `.env.local` 时只提供 `123456` 的本地预览，不能当作生产认证。Supabase 项目虽已配置六码 OTP，但默认邮件模板仍是 Magic link；在没有自定义 SMTP 时，真实 OTP 不能工作。
+
+**当前状态：** 用户提出“免邮箱、直接账号密码注册/登录”，尚未确认替代早期邮箱 OTP 决定。接手 AI 必须先让用户确认账号身份和密码找回策略，再动认证 UI、Supabase Auth 配置或本地 `.env.local`。
+
+### Decision 15：账号密码免邮箱登录是待决方案，不是已实现功能
+
+**问题：** 用户希望是否可不用邮箱，直接注册账号和密码。
+
+**已讨论的事实：** Supabase 原生 password auth 以邮箱或手机号为身份，不能直接以任意用户名作为 Auth identity。用户界面可以只显示账号名，但后台必须设计内部身份映射，或另建认证后端。
+
+**当前决定：** 未决定。不得关闭 Confirm email、不得把默认 Magic link 当成 OTP、不得创建伪造邮箱身份，也不得开始自建密码认证服务，直到用户明确选择方案。
+
+**方案与取舍：**
+
+- 保持邮箱 OTP：需要自定义 SMTP，把邮件模板改为 `{{ .Token }}`，并维持现有 UI/SDK 流程。
+- 邮箱+密码：Supabase 原生支持，但不符合“免邮箱”。
+- 手机号+密码：也为 Supabase 原生支持，但需 SMS 服务、号码验证和回收风险控制。
+- 自定义账号名+密码：可做，但需内部账号映射或自有认证服务；必须定义账号名唯一性、密码哈希、会话、找回密码、风控和与 Supabase RLS 的 JWT 衔接。对当前 MVP 是明显更重的路线。
+- 无账号/匿名/Passkey：是未来可探索方向，不能当作本次直接账号密码需求的默认答案。
+
+**未来重新考虑条件：** 用户明确确认“账号密码、无邮箱”的体验，并接受 V1 是否没有找回密码、是否以后绑定手机/邮箱、以及采用内部映射还是自建认证服务。
 
 ### Decision 14：先迭代验证再进入下一版本
 
@@ -562,32 +592,36 @@ d81ca17 feat: add email otp auth foundation
 6. **回忆优先短周期。** 不要把年度年报写成近期核心需求。
 7. **角色边界和开关。** “留”不可被拖出应用界面，面板随位置变化，重复点击可关闭。
 8. **底栏固定。** 不要重新在承载固定底栏的祖先上应用 `backdrop-filter`，否则会破坏固定定位。任何布局改动后必须手测滚动。
-9. **不要虚报云端能力。** 未配置 Supabase 时登录是本地 `123456` 预览；当前数据未上云；图片没有上传 Storage。
+9. **不要虚报云端能力。** “双模”Supabase 的表、RLS、私有 bucket 和 Auth 基础已存在，但当前 App 未配置 `.env.local`，登录仍是本地 `123456` 预览；当前数据未上云；图片没有上传 Storage。
 10. **隐私优先于便利。** 私有作品、便签、反馈和回看不可因社区功能被公开；云端接入必须先检查 RLS 和 Storage policy。
 11. **保留现有 LocalStorage 数据。** 当前真实测试数据存在浏览器 `creator-life-v1` 中。做数据层迁移时需要设计兼容/导入，不要直接更换 key 或清空。
 12. **用户先验收再跨版本。** 大功能先在当前版本完成可运行体验并接受用户反馈。
-13. **不覆写参考专业仓库历史。** GitHub remote 本来是专业 Web；生活模式继续使用 `life-mode-v1` 分支，除非用户明确调整仓库策略。
-14. **不复制参考网站。** 可以学习 `lvyovo-wiki.tech` 的布局感和微交互，不能复制其代码、内容或资产。
+13. **不改动旧参考仓库。** `creator-topic-library` 的既有代码与历史必须保持不变；全部当前和未来项目代码都应进入 `Dobble-mode`。本地 `origin` 已指向 `Dobble-mode`；不要再把生活模式或后续专业模式代码推送至旧仓库。
+14. **认证方案不得擅自切换。** 当前代码是邮箱 OTP 预览；用户正评估免邮箱账号密码，但尚未确认。不得在未确认前关闭 Confirm email、使用伪造邮箱、接入自建密码后端或写入 Supabase 前端连接信息。
+15. **私有媒体路径必须按用户分目录。** `creator-media` 的 RLS 要求对象路径以 Auth user ID 为第一层目录；不要把 bucket 改公开来绕过权限，也不要把社区图片直接放进私有作品路径。
+16. **不复制参考网站。** 可以学习 `lvyovo-wiki.tech` 的布局感和微交互，不能复制其代码、内容或资产。
 
 ## 14. Known Bugs, Risks and Technical Debt
 
 ### 高优先级
 
-1. **云端数据未接通。** SQL、文档和 Auth SDK 存在，但 UI 的作品、帖子、资料、图片仍只写 LocalStorage。真实邮箱登录后也不会自动把数据按用户保存到 Supabase。
+1. **云端数据未接通。** Supabase schema、RLS、Storage 和 Auth 基础已实际存在，但 UI 的作品、帖子、资料、图片仍只写 LocalStorage。没有 Repository 层，也没有真实登录后按用户保存的数据流。
 2. **本地数据未按账号隔离。** `creator-life-v1` 设备级共享。不同邮箱在同一浏览器登录，仍可能看到同一份本地作品/帖子/资料。接入真实账户前必须定义本地迁移和按 `userId` 隔离策略。
 3. **本地图片会撞浏览器配额。** 压缩后仍以 Base64 Data URL 存 LocalStorage。少量图片可用，大量封面/头像/帖子图片会触发配额异常。应在 Storage 接通后迁移为路径/URL，并保留错误提示。
 4. **生产环境不得暴露预览验证码。** 当前 `123456` 是开发 fallback。生产构建未配置 Supabase 时仍会出现，部署流程必须拦截或至少显式使用环境开关。
-5. **SQL migration 上线前需审计。** 它使用 `gen_random_uuid()` 但没有明确启用 `pgcrypto` 扩展；某些 Supabase 环境可能已有支持，也可能需要显式创建。Storage bucket 和 policies 不在 SQL 中。评论/点赞的策略也不支持删除或管理。不可不审查就直接当生产迁移。
+5. **真实邮箱 OTP 仍被 SMTP 阻塞。** 默认模板目前是 `{{ .ConfirmationURL }}` Magic link；默认发件服务不能编辑模板。当前 6 位 UI + `verifyOtp` 与默认邮件不兼容。需要自定义 SMTP、发件域名和 `{{ .Token }}` 模板，或用户正式选择另一套认证方案。
+6. **Storage 公私边界尚未完成。** `creator-media` 私有桶和 owner-only policy 已创建，但社区图像需要公开展示的存储设计尚未确定。不能把该桶整体改为 public。
 
 ### 中优先级
 
-6. **社区作者身份模型不稳定。** 当前本地帖子按昵称 `author` 筛选“我的发帖”；改昵称后旧帖可能消失。云端必须存 `user_id`，查询时 join profile 显示当前/快照昵称，并决定昵称变更历史规则。
-7. **短期回看没有真实日期过滤。** 页面叫“本周”，但作品和反馈未严格按最近 7 天计算；初始示例数据日期还是固定的 2026-08。应在确定周期规则后做日期范围、时区、无数据状态与统计口径。
-8. **初版回看文档过时。** `docs/MEMORY_REPORT_TODO.md` 写着“下一版本”和待新增 `MemoryRecapPage`，实际上已实现 `WeeklyRecap`。后续不能把文档当当前事实。
-9. **README 落后于实现。** 仍只描述早期 V1，不含认证、图片、本周回看、Supabase 文档。应在功能稳定后更新。
-10. **单体 App.tsx。** 所有页面/状态/交互集中，短期可以，长期接真实数据库/专业模式会难维护。新增领域功能时应渐进式拆分。
-11. **错误处理不足。** 图片压缩、LocalStorage 写入、认证网络错误、表单验证和云端访问失败没有完整可理解的错误与重试体验。
-12. **字体依赖外部网络。** 当前字体链接的可用性、授权与原生壳表现未验证。
+7. **社区作者身份模型不稳定。** 当前本地帖子按昵称 `author` 筛选“我的发帖”；改昵称后旧帖可能消失。云端必须存 `user_id`，查询时 join profile 显示当前/快照昵称，并决定昵称变更历史规则。
+8. **短期回看没有真实日期过滤。** 页面叫“本周”，但作品和反馈未严格按最近 7 天计算；初始示例数据日期还是固定的 2026-08。应在确定周期规则后做日期范围、时区、无数据状态与统计口径。
+9. **初版回看文档过时。** `docs/MEMORY_REPORT_TODO.md` 写着“下一版本”和待新增 `MemoryRecapPage`，实际上已实现 `WeeklyRecap`。后续不能把文档当当前事实。
+10. **Supabase 配置文档过时。** `docs/SUPABASE_SETUP.md` 仍把项目/bucket/RLS/redirect URL 写成待建事项，没有记录 project ref、实际执行状态或 SMTP/Magic link 限制。
+11. **README 落后于实现。** 仍只描述早期 V1，不含认证、图片、本周回看、Supabase 文档。应在功能稳定后更新。
+12. **单体 App.tsx。** 所有页面/状态/交互集中，短期可以，长期接真实数据库/专业模式会难维护。新增领域功能时应渐进式拆分。
+13. **错误处理不足。** 图片压缩、LocalStorage 写入、认证网络错误、表单验证和云端访问失败没有完整可理解的错误与重试体验。
+14. **字体依赖外部网络。** 当前字体链接的可用性、授权与原生壳表现未验证。
 
 ### 低优先级或体验完善
 
@@ -602,10 +636,10 @@ d81ca17 feat: add email otp auth foundation
 
 ### 高优先级
 
-1. **Supabase 的实际部署选择：** 是否由用户创建托管 Supabase 项目？还是用户服务器自托管数据库/认证？目前仅建议 Supabase，尚未获得具体项目 URL、区域、预算或账号所有权信息。
-2. **真实邮箱验证码配置：** 邮件服务、发件人、模板、验证码有效期、频率限制、中文文案、测试环境尚未确认。当前 SDK 使用 OTP 流程，因此 Supabase Email 模板也必须配置为 OTP，而不是只发 magic link。
+1. **认证最终选择：** 用户是否正式从邮箱 OTP 改为免邮箱账号密码？若改，账号名规则、密码最低要求、忘记密码、账号恢复、以后绑定手机号/邮箱、内部映射或自建认证服务均未决定。
+2. **真实邮箱验证码配置：** 若保留邮箱 OTP，需要选择和开通自定义 SMTP、发件域名、发件地址、模板、验证码有效期、频率限制、中文文案和测试方案。Supabase 默认邮件是 Magic link，不能满足现有 UI。
 3. **本地到云端迁移：** 用户测试期间产生的 LocalStorage 数据如何首登导入？失败时如何不丢数据？是否需要“仅此设备数据”确认？尚未决定。
-4. **部署方式：** 用户的服务器、域名、HTTPS、部署分支、环境变量与 CI/CD 均 Unknown。
+4. **部署方式：** 已确定使用托管 Supabase 项目 ref `zsrhgtplolhxrbzxwfkq`（双模），但用户服务器、域名、HTTPS、部署分支、环境变量与 CI/CD 仍 Unknown。
 
 ### 中优先级
 
@@ -629,7 +663,7 @@ d81ca17 feat: add email otp auth foundation
 ### 已基本确定的方向
 
 - 继续把生活模式做扎实，再以它为基础扩展专业模式。
-- 近期认证从本地预览走向真实邮箱验证码。
+- 近期从本地预览走向真实、可用的账号身份体系；具体是邮箱 OTP、账号密码还是其他方式仍待用户确认。
 - 最终应用目标包括 Android、iOS、鸿蒙；当前从 Web 原型起步。
 - 未来专业模式借鉴既有选题库 Web 的选题、评分与复盘能力，不能复制其作为整个 App 的母结构。
 - “留”长期是统一角色，并可在获得授权后使用产品内结构化数据。
@@ -637,11 +671,11 @@ d81ca17 feat: add email otp auth foundation
 
 ### 倾向如此，但仍应与用户确认
 
-- 使用 Supabase 作为早期 Auth/Postgres/Storage 后端。
+- 使用已创建的“双模”Supabase 作为早期 Postgres、RLS、Storage 和可能的 Auth 后端。
 - 先以七日回看作为短周期回看的正式形态，再考虑月度。
 - 社区未来的作品分享只做外链/封面卡，不托管视频。
 - Web 稳定后以 Capacitor 作为 Android/iOS 首轮封装方案。
-- 用户从邮箱登录过渡到手机号或免登录时，设计账号合并/迁移。
+- 用户从当前邮箱 OTP 方向切换到账号密码、手机号或免登录时，设计账号合并/迁移。
 
 ### Brainstorm / Idea Pool，不等于需求
 
@@ -693,16 +727,17 @@ d81ca17 feat: add email otp auth foundation
 - 登录服务：`C:\Users\shr\Desktop\像小学期\src\services\auth.ts`
 - 图片压缩：`C:\Users\shr\Desktop\像小学期\src\utils\image.ts`
 - 主题预留：`C:\Users\shr\Desktop\像小学期\src\theme.ts`、`docs\THEME_PACKS.md`
-- Supabase 配置说明：`docs\SUPABASE_SETUP.md`
-- Supabase migration 草案：`supabase\migrations\0001_life_mode.sql`
+- Supabase 配置说明：`docs\SUPABASE_SETUP.md`（部分过时，未记录当前实际配置和 SMTP 限制）
+- Supabase migration：`supabase\migrations\0001_life_mode.sql`（已实际执行，当前有未提交增强）
 - 回看设计清单：`docs\MEMORY_REPORT_TODO.md`（内容部分过时，详见技术债）
 - 早期运行说明：`README.md`（内容部分过时）
 
 ### 外部资源
 
-- GitHub 仓库：<https://github.com/shrrrrrrrr/creator-topic-library>
-- 远端生活模式分支：<https://github.com/shrrrrrrrr/creator-topic-library/tree/life-mode-v1>
-- 专业模式参考仓库：同上仓库的原始专业选题库内容；接手时请先检查分支/历史，不要假定当前默认分支是什么。
+- 当前代码仓库：<https://github.com/shrrrrrrrr/Dobble-mode>
+- 旧仓库 / 专业模式参考：<https://github.com/shrrrrrrrr/creator-topic-library>。该仓库中的既有代码保持不变；接手时只在需要研究专业模式时查看其分支/历史。
+- Supabase 控制台（双模项目）：<https://supabase.com/dashboard/project/zsrhgtplolhxrbzxwfkq>
+- Supabase 项目 URL：`https://zsrhgtplolhxrbzxwfkq.supabase.co`。此 URL 是公开前端配置的一部分；Anon Key 尚未取用或写入工作区。
 - 视觉参考：<https://lvyovo-wiki.tech/>。仅参考结构感、交互感和布局气质，不复制资源。
 - 本地预览地址：通常为 <http://localhost:5173/>，但是否运行需重新验证。
 
@@ -730,7 +765,11 @@ d81ca17 feat: add email otp auth foundation
 
 ### V1.1 和 V1.2：本地内容真实化与账号基础
 
-V1.1 加入本地图片、资料编辑、作品/社区图片和初版本周回看。最新 V1.2 根据用户“先用邮箱验证码”的决定加入认证适配和 Supabase schema 文档。用户随后要求进行本次高保真交接。
+V1.1 加入本地图片、资料编辑、作品/社区图片和初版本周回看。V1.2 根据用户“先用邮箱验证码”的决定加入认证适配和 Supabase schema 文档。
+
+### Supabase 项目落地与认证重新讨论
+
+用户提供并授权操作 Supabase 项目 ref `zsrhgtplolhxrbzxwfkq`，限定仅操作“双模”。AI 实际创建并验证数据库、RLS、私有媒体桶、六码 OTP 与本地 URL。随后发现默认邮件模板为 Magic link，免费默认服务无法编辑为验证码，真实 OTP 需自定义 SMTP。用户进一步提出免邮箱账号密码注册，尚未确认。因此项目进入“云端基础已就绪、认证产品决策待定、数据同步尚未开始”的阶段。
 
 ## 20. How the Next AI Should Work With the User
 
@@ -747,26 +786,26 @@ V1.1 加入本地图片、资料编辑、作品/社区图片和初版本周回�
 
 ## 21. Recommended Next Step
 
-当前工作最近完成的是 V1.2 认证基础。最合理的下一阶段不是马上做专业模式，而是把“账号存在后数据属于谁”这件事做扎实。建议按以下顺序推进，并在每个可见阶段让用户验收：
+当前工作已经完成了 Supabase 云端基础，最合理的下一阶段仍不是专业模式，而是把“账号是谁、数据属于谁、怎么从本地过渡”做扎实。建议按以下顺序推进，并在每个可见阶段让用户验收：
 
-1. **先确认后端归属与部署条件。** 向用户确认是否创建/提供 Supabase 项目，还是必须部署到其自有服务器。没有这个决定，不要假装可以完成真实邮箱发信与云同步。
-2. **审计并完善 Supabase 迁移。** 在非生产项目运行前检查 `pgcrypto`、Storage bucket/policy、评论/点赞策略、索引、更新时间触发器，以及私有作品和公开社区的边界。
-3. **设计本地数据迁移。** 以稳定 `user_id` 为中心，定义首个登录用户如何把 `creator-life-v1` 导入云端，如何避免不同账号读取同一份本地数据，如何保留失败恢复。
-4. **逐步替换数据读写。** 不要先大拆 UI。先抽出 `profile`、`works`、`feedback`、`community` repository/service 接口；用 Supabase 实现，保留 LocalStorage fallback 或明确迁移完成状态。
-5. **接通真实邮箱 OTP 并验收。** 配置 `.env.local`、Supabase Email OTP 模板和 Redirect URL；检查真实收信、验证码错误/过期、退出和换设备登录。上线前移除或严格隔离 `123456` preview。
-6. **处理图片 Storage。** 让当前 `compressImage` 的产物上传私有 Storage，以 `path` 替代 Base64；社区公开图片需要单独访问策略，不能让公开帖直接泄露私有作品文件。
-7. **更新文档和推送。** 云端或 UI 每完成一段，更新 README、回看 TODO 和本 HANDOFF 相关状态。Git 方面先解决当前证书问题，再把 `6a22ff6..d81ca17` 的本地提交推到 `life-mode-v1`。
+1. **先确认认证产品决策。** 让用户明确在“邮箱 OTP + 自定义 SMTP”与“免邮箱账号密码”等方案中选择。没有这个决定，不要创建 `.env.local`，不要让当前真实 Supabase Auth 与现有 OTP UI 发生不兼容连接。
+2. **若保留邮箱 OTP：配置 SMTP。** 用户需要提供/自行配置 SMTP 服务、发件域名与凭据；再把 Magic link 模板改为 `{{ .Token }}` 的验证码模板，测试六码验证码、过期、错误输入和退出。
+3. **若选择账号密码：先写认证 PRD。** 确定账号格式、唯一性、密码规则、恢复机制、是否绑定联系方式，以及采用内部身份映射还是自建认证服务。确认后再改 Auth Providers、前端和数据库。
+4. **设计本地数据迁移。** 以稳定 `user_id` 为中心，定义首个真实登录用户如何把 `creator-life-v1` 导入云端，如何避免不同账号读取同一份本地数据，如何保留失败恢复。
+5. **逐步替换数据读写。** 不要先大拆 UI。先抽出 `profile`、`works`、`feedback`、`community` repository/service 接口；用 Supabase 实现，保留 LocalStorage fallback 或明确迁移完成状态。
+6. **处理图片 Storage。** 让当前 `compressImage` 的产物上传私有 `creator-media`，对象路径采用 `{userId}/{filename}`，以 `path` 替代 Base64；另行设计社区公共图片桶/签名 URL，不能公开私有桶。
+7. **更新文档和推送。** 云端或 UI 每完成一段，更新 README、`docs/SUPABASE_SETUP.md`、回看 TODO 和本 HANDOFF。Git 方面 `origin` 已指向 `Dobble-mode`；先检查新远端分支，再推送本地历史和当前未提交 migration/HANDOFF，绝不再推向 `creator-topic-library`。
 
-在开始前务必检查：工作区是否有新用户改动、当前 dev server 是否仍运行、远端分支实际 commit、`.env.local` 是否存在但未被意外提交、以及用户是否真的希望现在配置外部 Supabase 服务。
+在开始前务必检查：工作区是否有新用户改动、当前 dev server 是否仍运行、远端分支实际 commit、`.env.local` 是否存在但未被意外提交，以及用户刚刚是否已正式确认认证方案。
 
-不要贸然做：专业模式全量开发、真实 AI 接入、视频托管、电话/免登录替换、主题选择 UI、年报大功能，或删除现有 LocalStorage 数据。
+不要贸然做：专业模式全量开发、真实 AI 接入、视频托管、主题选择 UI、年报大功能、伪造邮箱账号映射、在没有确认下切换认证方式，或删除现有 LocalStorage 数据。
 
 ## 22. Confidence and Unknowns
 
 ### 高置信事实
 
 - 当前代码是 React/TypeScript/Vite，LocalStorage 为真实数据来源。
-- 当前本地 HEAD 是 `d81ca17`，远端 `life-mode-v1` 是 `9bb5fff`，中间六个本地提交未确认上传。
+- 当前本地 HEAD 是 `d81ca17`。历史上旧仓库 `life-mode-v1` 停在 `9bb5fff`，但用户现已迁移到 `Dobble-mode`；新仓库的 remote 配置、分支和同步状态尚未核验。
 - 用户已确认生活模式先行、专业模式无便签、四个平台限制、社区内“我的”、短周期回看优先、邮箱 OTP 当前优先。
 - Vite build 脚本、Supabase 环境变量名、主要数据类型与 SQL 文件均已在工作区核对。
 
@@ -797,7 +836,7 @@ V1.1 加入本地图片、资料编辑、作品/社区图片和初版本周回�
 - 图片当前已做本地压缩，却没有 Storage 上传，可能造成 LocalStorage 配额问题。
 - 固定底栏的 `backdrop-filter` 根因是具体实现陷阱，后续 CSS 改动最容易回归。
 - 用户要求每版先验收修正再进下一版，新 AI 不应跳过这个协作节奏。
-- Git 最新改动目前只在本地提交，证书问题导致 GitHub 分支未同步，不可误报已上传。
+- 旧仓库同步曾被证书问题阻塞；用户现已迁移到 `Dobble-mode`。在重新检查新 remote 和远端提交前，不可误报最新代码已上传到新仓库。
 - 本文把用户确认、当前实现、AI 倾向和未知项分开记录；接手 AI 仍应以用户之后的最新明确表达为最高优先级。
 
 ## 24. Instructions for the Receiving AI

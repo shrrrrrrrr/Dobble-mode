@@ -1,3 +1,5 @@
+create extension if not exists pgcrypto;
+
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   nickname text not null default '我',
@@ -63,7 +65,24 @@ alter table public.community_posts enable row level security;
 alter table public.community_comments enable row level security;
 alter table public.community_likes enable row level security;
 
-create policy "profile owner only" on public.profiles for all using (auth.uid() = id) with check (auth.uid() = id);
+drop policy if exists "profile owner only" on public.profiles;
+drop policy if exists "profiles readable by everyone" on public.profiles;
+drop policy if exists "profiles insertable by owner" on public.profiles;
+drop policy if exists "profiles editable by owner" on public.profiles;
+drop policy if exists "work owner only" on public.works;
+drop policy if exists "feedback owner only" on public.feedback_events;
+drop policy if exists "posts readable by everyone" on public.community_posts;
+drop policy if exists "posts writable by owner" on public.community_posts;
+drop policy if exists "posts editable by owner" on public.community_posts;
+drop policy if exists "posts deletable by owner" on public.community_posts;
+drop policy if exists "comments readable by everyone" on public.community_comments;
+drop policy if exists "comments writable by owner" on public.community_comments;
+drop policy if exists "likes readable by everyone" on public.community_likes;
+drop policy if exists "likes writable by owner" on public.community_likes;
+
+create policy "profiles readable by everyone" on public.profiles for select using (true);
+create policy "profiles insertable by owner" on public.profiles for insert with check (auth.uid() = id);
+create policy "profiles editable by owner" on public.profiles for update using (auth.uid() = id) with check (auth.uid() = id);
 create policy "work owner only" on public.works for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "feedback owner only" on public.feedback_events for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "posts readable by everyone" on public.community_posts for select using (true);
@@ -74,3 +93,62 @@ create policy "comments readable by everyone" on public.community_comments for s
 create policy "comments writable by owner" on public.community_comments for insert with check (auth.uid() = user_id);
 create policy "likes readable by everyone" on public.community_likes for select using (true);
 create policy "likes writable by owner" on public.community_likes for insert with check (auth.uid() = user_id);
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  insert into public.profiles (id, nickname)
+  values (new.id, coalesce(new.raw_user_meta_data ->> 'nickname', '我'))
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
+
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_set_updated_at on public.profiles;
+create trigger profiles_set_updated_at
+  before update on public.profiles
+  for each row execute procedure public.set_updated_at();
+
+insert into storage.buckets (id, name, public)
+values ('creator-media', 'creator-media', false)
+on conflict (id) do update set public = false;
+
+drop policy if exists "creator media readable by owner" on storage.objects;
+drop policy if exists "creator media insertable by owner" on storage.objects;
+drop policy if exists "creator media editable by owner" on storage.objects;
+drop policy if exists "creator media deletable by owner" on storage.objects;
+
+create policy "creator media readable by owner"
+  on storage.objects for select to authenticated
+  using (bucket_id = 'creator-media' and (storage.foldername(name))[1] = (select auth.uid()::text));
+
+create policy "creator media insertable by owner"
+  on storage.objects for insert to authenticated
+  with check (bucket_id = 'creator-media' and (storage.foldername(name))[1] = (select auth.uid()::text));
+
+create policy "creator media editable by owner"
+  on storage.objects for update to authenticated
+  using (bucket_id = 'creator-media' and (storage.foldername(name))[1] = (select auth.uid()::text))
+  with check (bucket_id = 'creator-media' and (storage.foldername(name))[1] = (select auth.uid()::text));
+
+create policy "creator media deletable by owner"
+  on storage.objects for delete to authenticated
+  using (bucket_id = 'creator-media' and (storage.foldername(name))[1] = (select auth.uid()::text));

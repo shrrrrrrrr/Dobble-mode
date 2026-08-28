@@ -1,18 +1,22 @@
-import { FormEvent, PointerEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
-import { initialFeedback, initialPosts, initialProfile, initialWorks } from './data'
+import { FormEvent, PointerEvent, ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { initialProfile } from './data'
 import type { FeedbackEvent, Platform, Post, Tab, UserProfile, Work } from './types'
 import { compressImage } from './utils/image'
-import { AppSession, authMode, getSession, requestEmailCode, signOut, verifyEmailCode } from './services/auth'
+import { AppSession, getSession, registerLocalAccount, signInLocalAccount, signOut } from './services/auth'
 
-const storageKey = 'creator-life-v1'
+type AppState = { works: Work[]; feedback: FeedbackEvent[]; posts: Post[]; profile: UserProfile }
 
-function loadState() {
+function emptyState(): AppState {
+  return { works: [], feedback: [], posts: [], profile: initialProfile }
+}
+
+function loadState(userId: string): AppState {
   try {
-    const saved = localStorage.getItem(storageKey)
-    const parsed = saved ? JSON.parse(saved) : null
-    return parsed ? { ...parsed, profile: parsed.profile ?? initialProfile } : { works: initialWorks, feedback: initialFeedback, posts: initialPosts, profile: initialProfile }
+    const saved = localStorage.getItem(`creator-life-v2:data:${userId}`)
+    const parsed = saved ? JSON.parse(saved) as Partial<AppState> : null
+    return { ...emptyState(), ...parsed, profile: parsed?.profile ?? initialProfile }
   } catch {
-    return { works: initialWorks, feedback: initialFeedback, posts: initialPosts, profile: initialProfile }
+    return emptyState()
   }
 }
 
@@ -20,7 +24,7 @@ const number = (value: number) => new Intl.NumberFormat('zh-CN', { notation: 'co
 const today = new Date().toISOString().slice(0, 10)
 
 export default function App() {
-  const [state, setState] = useState(loadState)
+  const [state, setState] = useState<AppState>(emptyState)
   const [session, setSession] = useState<AppSession | null>(null)
   const [sessionReady, setSessionReady] = useState(false)
   const [tab, setTab] = useState<Tab>('home')
@@ -32,14 +36,20 @@ export default function App() {
   const [communityView, setCommunityView] = useState<'feed' | 'profile'>('feed')
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [assistantPos, setAssistantPos] = useState({ x: 0, y: 0 })
+  const activeUserId = useRef<string | null>(null)
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('我在。想看看你最近留下了什么，还是聊聊一条作品？')
   const drag = useRef<{ startX: number; startY: number; originX: number; originY: number; minX: number; maxX: number; minY: number; maxY: number } | null>(null)
   const didDrag = useRef(false)
   const frameRef = useRef<HTMLElement | null>(null)
 
-  useEffect(() => { localStorage.setItem(storageKey, JSON.stringify(state)) }, [state])
-  useEffect(() => { getSession().then(setSession).finally(() => setSessionReady(true)) }, [])
+  useEffect(() => {
+    if (session) setState(loadState(session.userId))
+  }, [session])
+  useEffect(() => {
+    if (session) localStorage.setItem(`creator-life-v2:data:${session.userId}`, JSON.stringify(state))
+  }, [session, state])
+  useEffect(() => { getSession().then(savedSession => { setSession(savedSession); setSessionReady(true) }) }, [])
 
   const memories = useMemo(() => {
     const highlighted = state.works.slice().sort((a: Work, b: Work) => (b.likes + b.favorites) - (a.likes + a.favorites)).slice(0, 2)
@@ -153,11 +163,11 @@ export default function App() {
   const nav = [{ id: 'home', label: '首页' }, { id: 'works', label: '作品' }, { id: 'memories', label: '回忆' }, { id: 'community', label: '社区' }] as const
 
   if (!sessionReady) return <main className="app-shell"><section className="auth-loading">正在打开你的创作桌面...</section></main>
-  if (!session) return <EmailAuthPage onAuthenticated={setSession} />
+  if (!session) return <LocalAuthPage onAuthenticated={setSession} />
 
   return <main className="app-shell">
     <section className="mobile-frame" ref={frameRef}>
-      <header className="topbar"><span className="brand">留白</span><span className="mode-pill">生活模式</span><div className="account-summary"><span>{session.email}</span><button onClick={handleSignOut}>退出</button></div></header>
+      <header className="topbar"><span className="brand">留白</span><span className="mode-pill">生活模式</span><div className="account-summary"><span>{session.username}</span><button onClick={handleSignOut}>退出</button></div></header>
       <div className="content">
         {selectedRecap ? <WeeklyRecap works={state.works} feedback={state.feedback} onClose={() => setSelectedRecap(false)} /> : selectedWork ? <WorkDetail work={selectedWork} feedback={state.feedback.filter((item: FeedbackEvent) => item.workId === selectedWork.id)} onClose={() => setSelectedWork(null)} onSaveNote={updateNote} onFeedback={addFeedback} /> : <>
           {tab === 'home' && <Home profile={state.profile} works={state.works} feedback={state.feedback} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} onNavigate={nextTab => { setTab(nextTab); if (nextTab === 'community') setCommunityView('feed') }} onOpenProfile={() => { setTab('community'); setCommunityView('profile') }} />}
@@ -176,38 +186,26 @@ export default function App() {
   </main>
 }
 
-function EmailAuthPage({ onAuthenticated }: { onAuthenticated: (session: AppSession) => void }) {
-  const [email, setEmail] = useState('')
-  const [code, setCode] = useState('')
-  const [sent, setSent] = useState(false)
+function LocalAuthPage({ onAuthenticated }: { onAuthenticated: (session: AppSession) => void }) {
+  const [registering, setRegistering] = useState(false)
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
 
-  async function sendCode(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setLoading(true)
     setMessage('')
     try {
-      const result = await requestEmailCode(email.trim())
-      setSent(true)
-      setMessage(result.previewCode ? `本地预览验证码：${result.previewCode}` : '验证码已发送，请前往邮箱查看。')
+      const nextSession = registering ? await registerLocalAccount(username, password) : await signInLocalAccount(username, password)
+      onAuthenticated(nextSession)
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '验证码发送失败，请稍后再试。')
+      setMessage(error instanceof Error ? error.message : '操作失败，请重新尝试。')
     } finally { setLoading(false) }
   }
 
-  async function verifyCode(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setLoading(true)
-    setMessage('')
-    try {
-      onAuthenticated(await verifyEmailCode(email.trim(), code.trim()))
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : '登录失败，请重新尝试。')
-    } finally { setLoading(false) }
-  }
-
-  return <main className="auth-shell"><section className="auth-card"><div className="auth-sticker">留</div><p className="eyebrow">创作生活</p><h1>先把你自己<br />带进来。</h1><p className="auth-copy">用邮箱验证码进入。手机号登录和免登录会作为移动端的后续认证方式。</p>{!sent ? <form className="auth-form" onSubmit={sendCode}><label>邮箱地址<input type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="name@example.com" required autoFocus /></label><button className="primary" disabled={loading}>{loading ? '发送中...' : '获取验证码'}</button></form> : <form className="auth-form" onSubmit={verifyCode}><label>验证码<input inputMode="numeric" value={code} onChange={event => setCode(event.target.value)} placeholder="输入 6 位验证码" maxLength={6} required autoFocus /></label><button className="primary" disabled={loading}>{loading ? '验证中...' : '进入创作桌面'}</button><button className="text-action" type="button" onClick={() => setSent(false)}>更换邮箱</button></form>}<p className="auth-message">{message}</p>{authMode === 'local-preview' && <p className="auth-preview">当前为本地开发预览，未配置真实邮件服务。</p>}</section></main>
+  return <main className="auth-shell"><section className="auth-card"><div className="auth-sticker">留</div><p className="eyebrow">创作生活</p><h1>{registering ? <>创建你的<br />创作桌面。</> : <>先把你自己<br />带进来。</>}</h1><p className="auth-copy">账号仅保存在当前设备。作品、回忆和社区记录会按账号分别保存。</p><form className="auth-form" onSubmit={submit}><label>账号<input value={username} onChange={event => setUsername(event.target.value)} placeholder="3–20 位字母、数字、下划线或短横线" maxLength={20} required autoFocus /></label><label>密码<input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="至少 6 位" minLength={6} required /></label><button className="primary" disabled={loading}>{loading ? '处理中...' : registering ? '创建并进入' : '进入创作桌面'}</button></form><button className="text-action auth-switch" onClick={() => { setRegistering(value => !value); setMessage('') }}>{registering ? '已有账号？直接登录' : '第一次来？创建本地账号'}</button><p className="auth-message">{message}</p><p className="auth-preview">这是当前版本的本地账号体验，不连接云端，也不迁移旧数据。</p></section></main>
 }
 
 function Home({ profile, works, feedback, onAdd, onOpenWork, onNavigate, onOpenProfile }: { profile: UserProfile; works: Work[]; feedback: FeedbackEvent[]; onAdd: () => void; onOpenWork: (work: Work) => void; onNavigate: (tab: Tab) => void; onOpenProfile: () => void }) {
