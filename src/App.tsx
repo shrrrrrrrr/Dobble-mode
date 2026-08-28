@@ -1,8 +1,9 @@
-import { FormEvent, PointerEvent, ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { FormEvent, PointerEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { initialProfile } from './data'
 import type { FeedbackEvent, Platform, Post, Tab, UserProfile, Work } from './types'
 import { compressImage } from './utils/image'
 import { AppSession, getSession, registerLocalAccount, signInLocalAccount, signOut } from './services/auth'
+import { importLegacyV1Data, markLegacyDismissed, markLegacyImported, shouldOfferLegacyImport } from './services/legacyImport'
 
 type AppState = { works: Work[]; feedback: FeedbackEvent[]; posts: Post[]; profile: UserProfile }
 
@@ -36,7 +37,7 @@ export default function App() {
   const [communityView, setCommunityView] = useState<'feed' | 'profile'>('feed')
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [assistantPos, setAssistantPos] = useState({ x: 0, y: 0 })
-  const activeUserId = useRef<string | null>(null)
+  const [legacyImportOpen, setLegacyImportOpen] = useState(false)
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('我在。想看看你最近留下了什么，还是聊聊一条作品？')
   const drag = useRef<{ startX: number; startY: number; originX: number; originY: number; minX: number; maxX: number; minY: number; maxY: number } | null>(null)
@@ -44,7 +45,13 @@ export default function App() {
   const frameRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
-    if (session) setState(loadState(session.userId))
+    if (!session) {
+      setLegacyImportOpen(false)
+      return
+    }
+    const nextState = loadState(session.userId)
+    setState(nextState)
+    setLegacyImportOpen(shouldOfferLegacyImport(session.userId, nextState))
   }, [session])
   useEffect(() => {
     if (session) localStorage.setItem(`creator-life-v2:data:${session.userId}`, JSON.stringify(state))
@@ -160,6 +167,24 @@ export default function App() {
     setSession(null)
   }
 
+  function acceptLegacyImport() {
+    if (!session) return
+    const legacy = importLegacyV1Data()
+    if (!legacy) {
+      setLegacyImportOpen(false)
+      return
+    }
+    setState(legacy)
+    markLegacyImported(session.userId)
+    setLegacyImportOpen(false)
+  }
+
+  function dismissLegacyImport() {
+    if (!session) return
+    markLegacyDismissed(session.userId)
+    setLegacyImportOpen(false)
+  }
+
   const nav = [{ id: 'home', label: '首页' }, { id: 'works', label: '作品' }, { id: 'memories', label: '回忆' }, { id: 'community', label: '社区' }] as const
 
   if (!sessionReady) return <main className="app-shell"><section className="auth-loading">正在打开你的创作桌面...</section></main>
@@ -183,6 +208,7 @@ export default function App() {
     {showWorkForm && <Modal title="记录一条作品" onClose={() => setShowWorkForm(false)}><WorkForm onSave={saveWork} /></Modal>}
     {showPostForm && <Modal title="发布到社区" onClose={() => setShowPostForm(false)}><PostForm onSave={savePost} /></Modal>}
     {showProfileForm && <Modal title="编辑个人资料" onClose={() => setShowProfileForm(false)}><ProfileForm profile={state.profile} onSave={saveProfile} /></Modal>}
+    {legacyImportOpen && <Modal title="发现旧版数据" onClose={dismissLegacyImport}><div className="legacy-import"><p>检测到这台设备上还有 V1.2 及以前的创作记录。要导入到当前账号吗？</p><p className="legacy-import-note">导入只会复制到当前账号，不会删除旧数据。如果跳过，之后不会再提示。</p><div className="legacy-import-actions"><button className="primary" onClick={acceptLegacyImport}>导入到当前账号</button><button className="text-action" onClick={dismissLegacyImport}>暂不导入</button></div></div></Modal>}
   </main>
 }
 
@@ -205,7 +231,7 @@ function LocalAuthPage({ onAuthenticated }: { onAuthenticated: (session: AppSess
     } finally { setLoading(false) }
   }
 
-  return <main className="auth-shell"><section className="auth-card"><div className="auth-sticker">留</div><p className="eyebrow">创作生活</p><h1>{registering ? <>创建你的<br />创作桌面。</> : <>先把你自己<br />带进来。</>}</h1><p className="auth-copy">账号仅保存在当前设备。作品、回忆和社区记录会按账号分别保存。</p><form className="auth-form" onSubmit={submit}><label>账号<input value={username} onChange={event => setUsername(event.target.value)} placeholder="3–20 位字母、数字、下划线或短横线" maxLength={20} required autoFocus /></label><label>密码<input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="至少 6 位" minLength={6} required /></label><button className="primary" disabled={loading}>{loading ? '处理中...' : registering ? '创建并进入' : '进入创作桌面'}</button></form><button className="text-action auth-switch" onClick={() => { setRegistering(value => !value); setMessage('') }}>{registering ? '已有账号？直接登录' : '第一次来？创建本地账号'}</button><p className="auth-message">{message}</p><p className="auth-preview">这是当前版本的本地账号体验，不连接云端，也不迁移旧数据。</p></section></main>
+  return <main className="auth-shell"><section className="auth-card"><div className="auth-sticker">留</div><p className="eyebrow">创作生活</p><h1>{registering ? <>创建你的<br />创作桌面。</> : <>先把你自己<br />带进来。</>}</h1><p className="auth-copy">账号仅保存在当前设备。作品、回忆和社区记录会按账号分别保存。</p><form className="auth-form" onSubmit={submit}><label>账号<input value={username} onChange={event => setUsername(event.target.value)} placeholder="3–20 位字母、数字、下划线或短横线" maxLength={20} required autoFocus /></label><label>密码<input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="至少 6 位" minLength={6} required /></label><button className="primary" disabled={loading}>{loading ? '处理中...' : registering ? '创建并进入' : '进入创作桌面'}</button></form><button className="text-action auth-switch" onClick={() => { setRegistering(value => !value); setMessage('') }}>{registering ? '已有账号？直接登录' : '第一次来？创建本地账号'}</button><p className="auth-message">{message}</p><p className="auth-preview">当前为本地账号体验，不连接云端。若设备上有旧版数据，登录后可选择导入。</p></section></main>
 }
 
 function Home({ profile, works, feedback, onAdd, onOpenWork, onNavigate, onOpenProfile }: { profile: UserProfile; works: Work[]; feedback: FeedbackEvent[]; onAdd: () => void; onOpenWork: (work: Work) => void; onNavigate: (tab: Tab) => void; onOpenProfile: () => void }) {
