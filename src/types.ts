@@ -27,6 +27,8 @@ export interface FeedbackEvent {
 
 export interface Post {
   id: string
+  /** Stable local account identity. Optional only for pre-V1.5 data. */
+  userId?: string
   author: string
   avatar: string
   content: string

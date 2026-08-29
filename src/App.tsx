@@ -11,14 +11,38 @@ function emptyState(): AppState {
   return { works: [], feedback: [], posts: [], profile: initialProfile }
 }
 
+function normalizeState(userId: string, parsed?: Partial<AppState> | null): AppState {
+  const profile = parsed?.profile ?? initialProfile
+  const posts = Array.isArray(parsed?.posts) ? parsed.posts : []
+  return {
+    ...emptyState(),
+    ...parsed,
+    profile,
+    works: Array.isArray(parsed?.works) ? parsed.works : [],
+    feedback: Array.isArray(parsed?.feedback) ? parsed.feedback : [],
+    posts: posts.map(post => ({
+      ...post,
+      // V1.5 adds stable ownership. Existing posts can be matched safely while
+      // the old nickname is still the current nickname.
+      userId: post.userId ?? (post.author === profile.nickname ? userId : undefined),
+    })),
+  }
+}
+
 function loadState(userId: string): AppState {
   try {
     const saved = localStorage.getItem(`creator-life-v2:data:${userId}`)
-    const parsed = saved ? JSON.parse(saved) as Partial<AppState> : null
-    return { ...emptyState(), ...parsed, profile: parsed?.profile ?? initialProfile }
+    return normalizeState(userId, saved ? JSON.parse(saved) as Partial<AppState> : null)
   } catch {
     return emptyState()
   }
+}
+
+function storageErrorMessage(error: unknown) {
+  if (error instanceof DOMException && (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+    return '设备存储空间已满。请删除不再需要的大图后再试。'
+  }
+  return error instanceof Error ? error.message : '保存失败，请稍后再试。'
 }
 
 const number = (value: number) => new Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 1 }).format(value)
@@ -52,6 +76,7 @@ const currentTime = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: 
 
 export default function App() {
   const [state, setState] = useState<AppState>(emptyState)
+  const [stateUserId, setStateUserId] = useState<string | null>(null)
   const [session, setSession] = useState<AppSession | null>(null)
   const [sessionReady, setSessionReady] = useState(false)
   const [tab, setTab] = useState<Tab>('home')
@@ -64,6 +89,8 @@ export default function App() {
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [assistantPos, setAssistantPos] = useState({ x: 0, y: 0 })
   const [legacyImportOpen, setLegacyImportOpen] = useState(false)
+  const [notice, setNotice] = useState('')
+  const [feedbackWorkId, setFeedbackWorkId] = useState<string | null>(null)
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('我在。想看看你最近留下了什么，还是聊聊一条作品？')
   const drag = useRef<{ startX: number; startY: number; originX: number; originY: number; minX: number; maxX: number; minY: number; maxY: number } | null>(null)
@@ -72,16 +99,24 @@ export default function App() {
 
   useEffect(() => {
     if (!session) {
+      setStateUserId(null)
       setLegacyImportOpen(false)
       return
     }
     const nextState = loadState(session.userId)
     setState(nextState)
+    setStateUserId(session.userId)
     setLegacyImportOpen(shouldOfferLegacyImport(session.userId, nextState))
   }, [session])
   useEffect(() => {
-    if (session) localStorage.setItem(`creator-life-v2:data:${session.userId}`, JSON.stringify(state))
-  }, [session, state])
+    if (!session || stateUserId !== session.userId) return
+    try {
+      localStorage.setItem(`creator-life-v2:data:${session.userId}`, JSON.stringify(state))
+      setNotice('')
+    } catch (error) {
+      setNotice(storageErrorMessage(error))
+    }
+  }, [session, state, stateUserId])
   useEffect(() => { getSession().then(savedSession => { setSession(savedSession); setSessionReady(true) }) }, [])
 
   const memories = useMemo(() => {
@@ -103,52 +138,72 @@ export default function App() {
 
   async function saveWork(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    const imageFile = form.get('coverImage')
-    const coverImage = imageFile instanceof File && imageFile.size > 0 ? await compressImage(imageFile) : undefined
-    const newWork: Work = {
-      id: crypto.randomUUID(), title: String(form.get('title')), platform: form.get('platform') as Platform,
-      publishedAt: String(form.get('publishedAt')), cover: String(form.get('cover')) || '新作品',
-      plays: Number(form.get('plays')) || 0, likes: Number(form.get('likes')) || 0,
-      comments: Number(form.get('comments')) || 0, favorites: Number(form.get('favorites')) || 0,
-      shares: Number(form.get('shares')) || 0, note: String(form.get('note')), mood: form.get('mood') as Work['mood'], coverImage,
+    try {
+      const form = new FormData(event.currentTarget)
+      const imageFile = form.get('coverImage')
+      const coverImage = imageFile instanceof File && imageFile.size > 0 ? await compressImage(imageFile) : undefined
+      const newWork: Work = {
+        id: crypto.randomUUID(), title: String(form.get('title')).trim(), platform: form.get('platform') as Platform,
+        publishedAt: String(form.get('publishedAt')), cover: String(form.get('cover')).trim() || '新作品',
+        plays: Number(form.get('plays')) || 0, likes: Number(form.get('likes')) || 0,
+        comments: Number(form.get('comments')) || 0, favorites: Number(form.get('favorites')) || 0,
+        shares: Number(form.get('shares')) || 0, note: String(form.get('note')).trim(), mood: form.get('mood') as Work['mood'], coverImage,
+      }
+      setState((current: typeof state) => ({ ...current, works: [newWork, ...current.works] }))
+      setShowWorkForm(false)
+      setNotice('')
+    } catch (error) {
+      setNotice(`作品保存失败：${storageErrorMessage(error)}`)
     }
-    setState((current: typeof state) => ({ ...current, works: [newWork, ...current.works] }))
-    setShowWorkForm(false)
   }
 
   async function savePost(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    const content = String(form.get('content')).trim()
-    if (!content) return
-    const imageFile = form.get('image')
-    const image = imageFile instanceof File && imageFile.size > 0 ? await compressImage(imageFile) : undefined
-    const post: Post = { id: crypto.randomUUID(), author: state.profile.nickname, avatar: state.profile.avatarLabel, content, image, imageCaption: String(form.get('imageCaption')).trim() || undefined, createdAt: '刚刚', likes: 0, liked: false, comments: [] }
-    setState((current: typeof state) => ({ ...current, posts: [post, ...current.posts] }))
-    setShowPostForm(false)
+    try {
+      const form = new FormData(event.currentTarget)
+      const content = String(form.get('content')).trim()
+      if (!content) return
+      const imageFile = form.get('image')
+      const image = imageFile instanceof File && imageFile.size > 0 ? await compressImage(imageFile) : undefined
+      const post: Post = { id: crypto.randomUUID(), userId: session?.userId, author: state.profile.nickname, avatar: state.profile.avatarLabel, content, image, imageCaption: String(form.get('imageCaption')).trim() || undefined, createdAt: '刚刚', likes: 0, liked: false, comments: [] }
+      setState((current: typeof state) => ({ ...current, posts: [post, ...current.posts] }))
+      setShowPostForm(false)
+      setNotice('')
+    } catch (error) {
+      setNotice(`社区发布失败：${storageErrorMessage(error)}`)
+    }
   }
 
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    const nickname = String(form.get('nickname')).trim() || '我'
-    const avatarFile = form.get('avatarImage')
-    const avatarImage = avatarFile instanceof File && avatarFile.size > 0 ? await compressImage(avatarFile, 480, 0.88) : state.profile.avatarImage
-    const profile: UserProfile = { nickname, avatarLabel: nickname.slice(0, 1), avatarImage }
-    setState((current: typeof state) => ({ ...current, profile }))
-    setShowProfileForm(false)
+    try {
+      const form = new FormData(event.currentTarget)
+      const nickname = String(form.get('nickname')).trim() || '我'
+      const avatarFile = form.get('avatarImage')
+      const avatarImage = avatarFile instanceof File && avatarFile.size > 0 ? await compressImage(avatarFile, 480, 0.88) : state.profile.avatarImage
+      const profile: UserProfile = { nickname, avatarLabel: nickname.slice(0, 1), avatarImage }
+      setState((current: typeof state) => ({ ...current, profile }))
+      setShowProfileForm(false)
+      setNotice('')
+    } catch (error) {
+      setNotice(`资料保存失败：${storageErrorMessage(error)}`)
+    }
   }
 
   function updateNote(workId: string, note: string) {
     setState((current: typeof state) => ({ ...current, works: current.works.map((work: Work) => work.id === workId ? { ...work, note } : work) }))
   }
 
-  function addFeedback(workId: string) {
-    const content = window.prompt('记下这个时刻：')?.trim()
+  function saveFeedback(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!feedbackWorkId) return
+    const form = new FormData(event.currentTarget)
+    const content = String(form.get('content')).trim()
     if (!content) return
-    const feedback: FeedbackEvent = { id: crypto.randomUUID(), workId, type: '自我认可', content, createdAt: today }
+    const feedback: FeedbackEvent = { id: crypto.randomUUID(), workId: feedbackWorkId, type: form.get('type') as FeedbackEvent['type'], content, createdAt: today }
     setState((current: typeof state) => ({ ...current, feedback: [feedback, ...current.feedback] }))
+    setFeedbackWorkId(null)
+    setNotice('')
   }
 
   function toggleLike(postId: string) {
@@ -206,7 +261,7 @@ export default function App() {
       setLegacyImportOpen(false)
       return
     }
-    setState(legacy)
+    setState(normalizeState(session.userId, legacy))
     markLegacyImported(session.userId)
     setLegacyImportOpen(false)
   }
@@ -226,11 +281,12 @@ export default function App() {
     <section className="mobile-frame" ref={frameRef}>
       <header className="topbar"><span className="brand">留白</span><span className="mode-pill">生活模式</span><div className="account-summary"><span>{session.username}</span><button onClick={handleSignOut}>退出</button></div></header>
       <div className="content">
-        {selectedRecap ? <WeeklyRecap works={recentWorks} feedback={recentFeedback} onClose={() => setSelectedRecap(false)} /> : selectedWork ? <WorkDetail work={selectedWork} feedback={state.feedback.filter((item: FeedbackEvent) => item.workId === selectedWork.id)} onClose={() => setSelectedWork(null)} onSaveNote={updateNote} onFeedback={addFeedback} /> : <>
+        {notice && <div className="app-notice" role="alert"><span>{notice}</span><button onClick={() => setNotice('')} aria-label="关闭提示">关闭</button></div>}
+        {selectedRecap ? <WeeklyRecap works={recentWorks} feedback={recentFeedback} onClose={() => setSelectedRecap(false)} /> : selectedWork ? <WorkDetail work={selectedWork} feedback={state.feedback.filter((item: FeedbackEvent) => item.workId === selectedWork.id)} onClose={() => setSelectedWork(null)} onSaveNote={updateNote} onFeedback={() => setFeedbackWorkId(selectedWork.id)} /> : <>
           {tab === 'home' && <Home profile={state.profile} works={recentWorks} feedback={recentFeedback} dateLabel={todayLabel} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} onNavigate={nextTab => { setTab(nextTab); if (nextTab === 'community') setCommunityView('feed') }} onOpenProfile={() => { setTab('community'); setCommunityView('profile') }} />}
           {tab === 'works' && <Works works={state.works} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} />}
           {tab === 'memories' && <Memories memories={memories} works={recentWorks} onOpenRecap={() => setSelectedRecap(true)} />}
-          {tab === 'community' && <Community view={communityView} profile={state.profile} posts={state.posts} onAdd={() => setShowPostForm(true)} onLike={toggleLike} onComment={addComment} onViewChange={setCommunityView} onEditProfile={() => setShowProfileForm(true)} />}
+          {tab === 'community' && <Community userId={session.userId} view={communityView} profile={state.profile} posts={state.posts} onAdd={() => setShowPostForm(true)} onLike={toggleLike} onComment={addComment} onViewChange={setCommunityView} onEditProfile={() => setShowProfileForm(true)} />}
         </>}
       </div>
       {!selectedWork && !selectedRecap && <nav className="bottom-nav">{nav.map(item => <button key={item.id} className={tab === item.id ? 'active' : ''} onClick={() => { setTab(item.id); if (item.id === 'community') setCommunityView('feed') }}><span className="nav-mark" />{item.label}</button>)}</nav>}
@@ -240,6 +296,7 @@ export default function App() {
     {showWorkForm && <Modal title="记录一条作品" onClose={() => setShowWorkForm(false)}><WorkForm onSave={saveWork} /></Modal>}
     {showPostForm && <Modal title="发布到社区" onClose={() => setShowPostForm(false)}><PostForm onSave={savePost} /></Modal>}
     {showProfileForm && <Modal title="编辑个人资料" onClose={() => setShowProfileForm(false)}><ProfileForm profile={state.profile} onSave={saveProfile} /></Modal>}
+    {feedbackWorkId && <Modal title="记录一个珍藏时刻" onClose={() => setFeedbackWorkId(null)}><FeedbackForm onSave={saveFeedback} /></Modal>}
     {legacyImportOpen && <Modal title="发现旧版数据" onClose={dismissLegacyImport}><div className="legacy-import"><p>检测到这台设备上还有 V1.2 及以前的创作记录。要导入到当前账号吗？</p><p className="legacy-import-note">导入只会复制到当前账号，不会删除旧数据。如果跳过，之后不会再提示。</p><div className="legacy-import-actions"><button className="primary" onClick={acceptLegacyImport}>导入到当前账号</button><button className="text-action" onClick={dismissLegacyImport}>暂不导入</button></div></div></Modal>}
   </main>
 }
@@ -301,12 +358,12 @@ function WorkCard({ work }: { work: Work }) { return <article className={`work-c
 
 function Memories({ memories, works, onOpenRecap }: { memories: { id: string; label: string; title: string; detail: string; note: string }[]; works: Work[]; onOpenRecap: () => void }) { return <><section className="page-head memories-head"><p className="eyebrow">短期回看</p><h1>这一周，<br />你留下些什么？</h1><p>回看不必等到年末。它会收起最近七天的作品、感受和反馈。</p><button className="primary recap-entry" onClick={onOpenRecap}>打开本周回看</button></section>{memories.length ? <div className="memory-stack">{memories.map((memory, index) => <article className={`memory-card memory-${index}`} key={memory.id}><p>{memory.label}</p><h2>{memory.title}</h2><span>{memory.detail}</span><blockquote>{memory.note || '这一刻，值得被收起来。'}</blockquote></article>)}</div> : <section className="empty memory-empty"><p>最近七天还没有作品回忆。</p><span>记录一条作品后，这里会为你整理本周值得回看的片段。</span></section>}<p className="small-note">基于最近七天的 {works.length} 条作品与创作记录生成</p></> }
 
-function Community({ view, profile, posts, onAdd, onLike, onComment, onViewChange, onEditProfile }: { view: 'feed' | 'profile'; profile: UserProfile; posts: Post[]; onAdd: () => void; onLike: (id: string) => void; onComment: (id: string, comment: string) => void; onViewChange: (view: 'feed' | 'profile') => void; onEditProfile: () => void }) {
+function Community({ userId, view, profile, posts, onAdd, onLike, onComment, onViewChange, onEditProfile }: { userId: string; view: 'feed' | 'profile'; profile: UserProfile; posts: Post[]; onAdd: () => void; onLike: (id: string) => void; onComment: (id: string, comment: string) => void; onViewChange: (view: 'feed' | 'profile') => void; onEditProfile: () => void }) {
   const [replyingTo, setReplyingTo] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
-  const myPosts = posts.filter(post => post.author === profile.nickname)
+  const myPosts = posts.filter(post => post.userId === userId)
   if (view === 'profile') return <><section className="profile-page"><button className="profile-nav-button back-button" onClick={() => onViewChange('feed')}>返回社区</button><button className="profile-nav-button edit-profile-button" onClick={onEditProfile}>编辑资料</button><div className="profile-avatar">{profile.avatarImage ? <img src={profile.avatarImage} alt="我的头像" /> : profile.avatarLabel}</div><p className="eyebrow">个人主页</p><h1>{profile.nickname}的创作角落</h1><p className="profile-note">资料已保存在当前设备；接入账号后会同步至云端。</p><div className="badges"><span>连续记录者</span><span>社区新朋友</span></div></section><section className="section"><p className="eyebrow">我的发帖</p>{myPosts.length ? myPosts.map(post => <article className="post mine" key={post.id}><p className="post-content">{post.content}</p><small>{post.createdAt} · {post.likes} 次喜欢</small></article>) : <p className="empty">你还没有发布内容。去社区说说正在经历的创作吧。</p>}</section></>
-  return <><section className="page-head community-head"><p className="eyebrow">创作者社区</p><h1>说说你正在<br />经历的创作。</h1><div className="community-actions"><button className="profile-nav-button" onClick={() => onViewChange('profile')}>我的</button><button className="primary compact" onClick={onAdd}>发布</button></div></section><div className="post-list">{posts.map(post => <article className="post" key={post.id}><div className="post-author"><span className="avatar">{post.avatar}</span><div><strong>{post.author}</strong><small>{post.createdAt}</small></div></div><p className="post-content">{post.content}</p>{post.image && <img className="post-image" src={post.image} alt={post.imageCaption || '社区图片'} />}{!post.image && post.imageCaption && <div className="post-image">{post.imageCaption}</div>}<div className="post-actions"><button className={post.liked ? 'liked' : ''} onClick={() => onLike(post.id)}>喜欢 {post.likes}</button><button onClick={() => setReplyingTo(replyingTo === post.id ? null : post.id)}>回应 {post.comments.length}</button></div>{replyingTo === post.id && <form className="reply-form" onSubmit={event => { event.preventDefault(); onComment(post.id, draft.trim()); setDraft(''); setReplyingTo(null) }}><input value={draft} onChange={event => setDraft(event.target.value)} placeholder="写下你的回应" autoFocus /><button disabled={!draft.trim()}>发送</button></form>}{post.comments.slice(-2).map((comment, index) => <p className="comment" key={index}>{comment}</p>)}</article>)}</div></>
+  return <><section className="page-head community-head"><p className="eyebrow">创作者社区</p><h1>说说你正在<br />经历的创作。</h1><div className="community-actions"><button className="profile-nav-button" onClick={() => onViewChange('profile')}>我的</button><button className="primary compact" onClick={onAdd}>发布</button></div></section><div className="post-list">{posts.map(post => { const isMine = post.userId === userId; const author = isMine ? profile.nickname : post.author; const avatar = isMine ? profile.avatarLabel : post.avatar; return <article className="post" key={post.id}><div className="post-author"><span className="avatar">{avatar}</span><div><strong>{author}</strong><small>{post.createdAt}</small></div></div><p className="post-content">{post.content}</p>{post.image && <img className="post-image" src={post.image} alt={post.imageCaption || '社区图片'} />}{!post.image && post.imageCaption && <div className="post-image">{post.imageCaption}</div>}<div className="post-actions"><button className={post.liked ? 'liked' : ''} onClick={() => onLike(post.id)}>喜欢 {post.likes}</button><button onClick={() => setReplyingTo(replyingTo === post.id ? null : post.id)}>回应 {post.comments.length}</button></div>{replyingTo === post.id && <form className="reply-form" onSubmit={event => { event.preventDefault(); onComment(post.id, draft.trim()); setDraft(''); setReplyingTo(null) }}><input value={draft} onChange={event => setDraft(event.target.value)} placeholder="写下你的回应" autoFocus /><button disabled={!draft.trim()}>发送</button></form>}{post.comments.slice(-2).map((comment, index) => <p className="comment" key={index}>{comment}</p>)}</article> })}</div></>
 }
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) { return <div className="modal-backdrop" onMouseDown={onClose}><section className="modal" onMouseDown={event => event.stopPropagation()}><button className="close" onClick={onClose}>关闭</button><h2>{title}</h2>{children}</section></div> }
@@ -317,7 +374,9 @@ function PostForm({ onSave }: { onSave: (event: FormEvent<HTMLFormElement>) => v
 
 function ProfileForm({ profile, onSave }: { profile: UserProfile; onSave: (event: FormEvent<HTMLFormElement>) => void | Promise<void> }) { return <form className="entry-form" onSubmit={onSave}><label>昵称<input name="nickname" defaultValue={profile.nickname} maxLength={18} required /></label><label>头像图片<input name="avatarImage" type="file" accept="image/*" /></label><p className="form-hint">图片会在当前设备压缩后保存。云端同步将在账号系统接入后启用。</p><button className="primary" type="submit">保存资料</button></form> }
 
-function WorkDetail({ work, feedback, onClose, onSaveNote, onFeedback }: { work: Work; feedback: FeedbackEvent[]; onClose: () => void; onSaveNote: (id: string, note: string) => void; onFeedback: (id: string) => void }) { const [note, setNote] = useState(work.note); return <section className="work-detail-page"><button className="back-link" onClick={onClose}>返回</button><div className={`detail-cover cover-${work.id.slice(-1)}`}>{work.coverImage ? <img src={work.coverImage} alt={`${work.title}封面`} /> : <span>{work.cover}</span>}</div><p className="eyebrow">{work.platform} · 发布于 {work.publishedAt}</p><h1>{work.title}</h1><p className="detail-mood">那时的你：{work.mood}</p><div className="detail-metrics"><span>{number(work.plays)}<small>观看</small></span><span>{number(work.likes)}<small>喜欢</small></span><span>{work.comments}<small>评论</small></span><span>{number(work.favorites)}<small>收藏</small></span><span>{work.shares}<small>分享</small></span></div><label className="note-field">生活便签<textarea value={note} onChange={e => setNote(e.target.value)} onBlur={() => onSaveNote(work.id, note)} /></label><div className="detail-head"><p className="eyebrow">珍藏反馈</p><button onClick={() => onFeedback(work.id)}>记录时刻</button></div>{feedback.length ? feedback.map(item => <article className="moment" key={item.id}><span>{item.type}</span><p>{item.content}</p></article>) : <p className="empty">留下一句评论或一个感受，它会在回忆里出现。</p>}</section> }
+function FeedbackForm({ onSave }: { onSave: (event: FormEvent<HTMLFormElement>) => void }) { return <form className="entry-form" onSubmit={onSave}><label>这是怎样的时刻？<select name="type" defaultValue="自我认可"><option>点赞突破</option><option>暖心评论</option><option>被转发</option><option>自我认可</option></select></label><label>记下它<textarea name="content" required autoFocus placeholder="例如：有人说这条内容让她重新振作起来。" /></label><p className="form-hint">它会出现在这条作品的珍藏反馈和最近七天回看里。</p><button className="primary" type="submit">保存时刻</button></form> }
+
+function WorkDetail({ work, feedback, onClose, onSaveNote, onFeedback }: { work: Work; feedback: FeedbackEvent[]; onClose: () => void; onSaveNote: (id: string, note: string) => void; onFeedback: () => void }) { const [note, setNote] = useState(work.note); return <section className="work-detail-page"><button className="back-link" onClick={onClose}>返回</button><div className={`detail-cover cover-${work.id.slice(-1)}`}>{work.coverImage ? <img src={work.coverImage} alt={`${work.title}封面`} /> : <span>{work.cover}</span>}</div><p className="eyebrow">{work.platform} · 发布于 {work.publishedAt}</p><h1>{work.title}</h1><p className="detail-mood">那时的你：{work.mood}</p><div className="detail-metrics"><span>{number(work.plays)}<small>观看</small></span><span>{number(work.likes)}<small>喜欢</small></span><span>{work.comments}<small>评论</small></span><span>{number(work.favorites)}<small>收藏</small></span><span>{work.shares}<small>分享</small></span></div><label className="note-field">生活便签<textarea value={note} onChange={e => setNote(e.target.value)} onBlur={() => onSaveNote(work.id, note)} /></label><div className="detail-head"><p className="eyebrow">珍藏反馈</p><button onClick={onFeedback}>记录时刻</button></div>{feedback.length ? feedback.map(item => <article className="moment" key={item.id}><span>{item.type}</span><p>{item.content}</p></article>) : <p className="empty">留下一句评论或一个感受，它会在回忆里出现。</p>}</section> }
 
 function WeeklyRecap({ works, feedback, onClose }: { works: Work[]; feedback: FeedbackEvent[]; onClose: () => void }) {
   const [page, setPage] = useState(0)
