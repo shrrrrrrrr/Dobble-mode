@@ -5,6 +5,7 @@ import { buildCalendarArt } from './utils/calendarArt'
 import { AppSession, getSession, registerLocalAccount, signInLocalAccount, signOut } from './services/auth'
 import { importLegacyV1Data, markLegacyDismissed, markLegacyImported, shouldOfferLegacyImport } from './services/legacyImport'
 import { emptyAppState, LocalAppRepository, normalizeAppState, type AppState } from './services/repository'
+import { cloudEnabled, cloudSignIn, cloudSignOut, cloudSignUp, fetchCloudState, getCloudAccount, pushCloudState, type CloudAccount } from './services/cloud'
 import { seasonPacks, themePacks, type SeasonId, type ThemeId } from './theme'
 
 function storageErrorMessage(error: unknown) {
@@ -45,6 +46,15 @@ function formatClock(date: Date) {
   return new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(date)
 }
 
+function formatPostTime(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(value)) return value
+  const date = new Date(value)
+  const now = new Date()
+  const sameDay = date.toDateString() === now.toDateString()
+  const time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+  return sameDay ? time : `${date.getMonth() + 1}月${date.getDate()}日 ${time}`
+}
+
 export default function App() {
   const [state, setState] = useState<AppState>(emptyAppState)
   const [stateUserId, setStateUserId] = useState<string | null>(null)
@@ -67,6 +77,11 @@ export default function App() {
   const [feedbackWorkId, setFeedbackWorkId] = useState<string | null>(null)
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('我在。想看看你最近留下了什么，还是聊聊一条作品？')
+  const [cloudAccount, setCloudAccount] = useState<CloudAccount | null>(null)
+  const [cloudMessage, setCloudMessage] = useState('')
+  const [cloudBusy, setCloudBusy] = useState(false)
+  const [cloudSyncedAt, setCloudSyncedAt] = useState('')
+  const cloudPushTimer = useRef<number | null>(null)
   const drag = useRef<{ startX: number; startY: number; originX: number; originY: number; minX: number; maxX: number; minY: number; maxY: number } | null>(null)
   const didDrag = useRef(false)
   const frameRef = useRef<HTMLElement | null>(null)
@@ -88,10 +103,83 @@ export default function App() {
   useEffect(() => {
     if (!session || !repository || stateUserId !== session.userId) return
     repository.save(state).then(() => setNotice('')).catch(error => setNotice(storageErrorMessage(error)))
+    if (cloudEnabled && cloudAccount) {
+      if (cloudPushTimer.current) window.clearTimeout(cloudPushTimer.current)
+      cloudPushTimer.current = window.setTimeout(() => {
+        pushCloudState(state).then(result => {
+          if (result.ok) setCloudSyncedAt(new Date().toLocaleTimeString('zh-CN'))
+        })
+      }, 2000)
+    }
   }, [repository, session, state, stateUserId])
   useEffect(() => { document.body.dataset.theme = state.theme }, [state.theme])
   useEffect(() => { const timer = window.setInterval(() => setClock(new Date()), 1000); return () => window.clearInterval(timer) }, [])
   useEffect(() => { getSession().then(savedSession => { setSession(savedSession); setSessionReady(true) }) }, [])
+  useEffect(() => {
+    if (!cloudEnabled) return
+    getCloudAccount().then(account => setCloudAccount(account))
+  }, [])
+
+  useEffect(() => {
+    if (!cloudEnabled || !cloudAccount || !session || !repository || stateUserId !== session.userId) return
+    let cancelled = false
+    ;(async () => {
+      setCloudBusy(true)
+      try {
+        const snap = await fetchCloudState()
+        if (cancelled) return
+        const localAt = state.updatedAt ?? ''
+        if (snap && snap.updatedAt > localAt) {
+          const next = normalizeAppState(session.userId, snap.state as Partial<AppState>)
+          setState(next)
+          await repository.save(next)
+          setCloudSyncedAt(new Date().toLocaleString('zh-CN'))
+          setCloudMessage('已从云端同步最新数据。')
+        } else if (!snap || state.works.length + state.feedback.length + state.posts.length > 0) {
+          await pushCloudState(state)
+          setCloudSyncedAt(new Date().toLocaleString('zh-CN'))
+          setCloudMessage('本地数据已同步到云端。')
+        }
+      } catch (error) {
+        if (!cancelled) setCloudMessage(error instanceof Error ? error.message : '云同步失败，请稍后再试。')
+      } finally {
+        if (!cancelled) setCloudBusy(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [cloudAccount?.email, stateUserId])
+
+  async function syncCloudNow() {
+    if (!cloudAccount) return
+    setCloudBusy(true)
+    setCloudMessage('')
+    try {
+      const snap = await fetchCloudState()
+      if (snap && snap.updatedAt > (state.updatedAt ?? '')) {
+        if (session) {
+          const next = normalizeAppState(session.userId, snap.state as Partial<AppState>)
+          setState(next)
+          if (repository) await repository.save(next)
+        }
+        setCloudMessage('已从云端同步最新数据。')
+      } else {
+        const result = await pushCloudState(state)
+        setCloudMessage(result.ok ? '本地数据已同步到云端。' : result.error)
+      }
+      setCloudSyncedAt(new Date().toLocaleString('zh-CN'))
+    } catch (error) {
+      setCloudMessage(error instanceof Error ? error.message : '云同步失败，请稍后再试。')
+    } finally {
+      setCloudBusy(false)
+    }
+  }
+
+  async function handleCloudSignOut() {
+    await cloudSignOut()
+    setCloudAccount(null)
+    setCloudMessage('')
+    setCloudSyncedAt('')
+  }
 
   const memories = useMemo(() => {
     const recentWindow = getRecentSevenDays()
@@ -145,7 +233,7 @@ export default function App() {
       if (!content) return
       const imageFile = form.get('image')
       const image = imageFile instanceof File && imageFile.size > 0 ? await compressImage(imageFile) : undefined
-      const post: Post = { id: crypto.randomUUID(), userId: session?.userId, author: state.profile.nickname, avatar: state.profile.avatarLabel, content, image, imageCaption: String(form.get('imageCaption')).trim() || undefined, createdAt: '刚刚', likes: 0, liked: false, comments: [] }
+      const post: Post = { id: crypto.randomUUID(), userId: session?.userId, author: state.profile.nickname, avatar: state.profile.avatarLabel, content, image, imageCaption: String(form.get('imageCaption')).trim() || undefined, createdAt: new Date().toISOString(), likes: 0, liked: false, comments: [] }
       setState((current: typeof state) => ({ ...current, posts: [post, ...current.posts] }))
       setShowPostForm(false)
       setNotice('')
@@ -267,7 +355,7 @@ export default function App() {
           {tab === 'home' && <Home profile={state.profile} works={recentWorks} feedback={recentFeedback} dateLabel={todayLabel} clockText={formatClock(clock)} clock={clock} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} onNavigate={nextTab => { setTab(nextTab); if (nextTab === 'community') setCommunityView('feed') }} onOpenProfile={() => { setTab('community'); setCommunityView('profile') }} />}
           {tab === 'works' && <Works works={state.works} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} />}
           {tab === 'memories' && <Memories memories={memories} works={recentWorks} onOpenRecap={() => setSelectedRecap(true)} />}
-          {tab === 'community' && <Community userId={session.userId} view={communityView} profile={state.profile} posts={state.posts} onAdd={() => setShowPostForm(true)} onLike={toggleLike} onComment={addComment} onViewChange={setCommunityView} onEditProfile={() => setShowProfileForm(true)} />}
+          {tab === 'community' && <Community userId={session.userId} view={communityView} profile={state.profile} posts={state.posts} onAdd={() => setShowPostForm(true)} onLike={toggleLike} onComment={addComment} onViewChange={setCommunityView} onEditProfile={() => setShowProfileForm(true)} cloudPanel={<CloudSyncPanel account={cloudAccount} busy={cloudBusy} message={cloudMessage} syncedAt={cloudSyncedAt} onSignIn={async (email, password) => { const result = await cloudSignIn(email, password); if (result.ok) { setCloudAccount(result.data); setCloudMessage('') } return result.ok ? null : result.error }} onSignUp={async (email, password) => { const result = await cloudSignUp(email, password); if (result.ok) { setCloudAccount(result.data); setCloudMessage('') } return result.ok ? null : result.error }} onSignOut={handleCloudSignOut} onSyncNow={syncCloudNow} />} />}
         </>}
       </div>
       {!selectedWork && !selectedRecap && <nav className="bottom-nav">{nav.map(item => <button key={item.id} className={tab === item.id ? 'active' : ''} onClick={() => { setTab(item.id); if (item.id === 'community') setCommunityView('feed') }}><span className="nav-mark" />{item.label}</button>)}</nav>}
@@ -363,12 +451,55 @@ function WorkCard({ work }: { work: Work }) { return <article className={`work-c
 
 function Memories({ memories, works, onOpenRecap }: { memories: { id: string; label: string; title: string; detail: string; note: string }[]; works: Work[]; onOpenRecap: () => void }) { return <><section className="page-head memories-head"><p className="eyebrow">短期回看</p><h1>这一周，<br />你留下些什么？</h1><p>回看不必等到年末。它会收起最近七天的作品、感受和反馈。</p><button className="primary recap-entry" onClick={onOpenRecap}>打开本周回看</button></section>{memories.length ? <div className="memory-stack">{memories.map((memory, index) => <article className={`memory-card memory-${index}`} key={memory.id}><p>{memory.label}</p><h2>{memory.title}</h2><span>{memory.detail}</span><blockquote>{memory.note || '这一刻，值得被收起来。'}</blockquote></article>)}</div> : <section className="empty memory-empty"><p>最近七天还没有作品回忆。</p><span>记录一条作品后，这里会为你整理本周值得回看的片段。</span></section>}<p className="small-note">基于最近七天的 {works.length} 条作品与创作记录生成</p></> }
 
-function Community({ userId, view, profile, posts, onAdd, onLike, onComment, onViewChange, onEditProfile }: { userId: string; view: 'feed' | 'profile'; profile: UserProfile; posts: Post[]; onAdd: () => void; onLike: (id: string) => void; onComment: (id: string, comment: string) => void; onViewChange: (view: 'feed' | 'profile') => void; onEditProfile: () => void }) {
+function CloudSyncPanel({ account, busy, message, syncedAt, onSignIn, onSignUp, onSignOut, onSyncNow }: { account: CloudAccount | null; busy: boolean; message: string; syncedAt: string; onSignIn: (email: string, password: string) => Promise<string | null>; onSignUp: (email: string, password: string) => Promise<string | null>; onSignOut: () => void; onSyncNow: () => void }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [registering, setRegistering] = useState(false)
+  const [formMessage, setFormMessage] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setSubmitting(true)
+    setFormMessage('')
+    const error = registering ? await onSignUp(email.trim(), password) : await onSignIn(email.trim(), password)
+    if (error) setFormMessage(error)
+    else { setPassword(''); setFormMessage('') }
+    setSubmitting(false)
+  }
+
+  return <section className="cloud-sync">
+    <p className="eyebrow">云同步</p>
+    {!cloudEnabled && <p className="cloud-hint">云端未配置。在项目根目录创建 .env.local 并填入 Supabase 地址与 Anon Key 后，可开启跨设备同步。</p>}
+    {cloudEnabled && !account && <form className="cloud-form" onSubmit={submit}>
+      <p className="cloud-hint">云账号用于跨设备同步，与本地登录账号相互独立。使用邮箱和密码创建或登录。</p>
+      <label>邮箱<input type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="you@example.com" required autoComplete="email" /></label>
+      <label>密码<input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="至少 6 位" minLength={6} required autoComplete={registering ? 'new-password' : 'current-password'} /></label>
+      <div className="cloud-actions">
+        <button className="primary compact-static" type="submit" disabled={submitting}>{submitting ? '处理中...' : registering ? '创建云账号' : '登录云账号'}</button>
+        <button type="button" className="text-action" onClick={() => { setRegistering(value => !value); setFormMessage('') }}>{registering ? '已有云账号？直接登录' : '第一次使用？创建云账号'}</button>
+      </div>
+      {formMessage && <p className="cloud-message">{formMessage}</p>}
+    </form>}
+    {cloudEnabled && account && <div className="cloud-status">
+      <p><strong>{account.email}</strong></p>
+      {syncedAt && <small>上次同步：{syncedAt}</small>}
+      {message && <p className="cloud-message">{message}</p>}
+      <div className="cloud-actions">
+        <button className="primary compact-static" onClick={onSyncNow} disabled={busy}>{busy ? '同步中...' : '立即同步'}</button>
+        <button type="button" className="text-action" onClick={onSignOut}>退出云账号</button>
+      </div>
+      <p className="cloud-hint">同一时间在一台设备上编辑即可；两台设备都改过时，以最后保存的一端为准。</p>
+    </div>}
+  </section>
+}
+
+function Community({ userId, view, profile, posts, onAdd, onLike, onComment, onViewChange, onEditProfile, cloudPanel }: { userId: string; view: 'feed' | 'profile'; profile: UserProfile; posts: Post[]; onAdd: () => void; onLike: (id: string) => void; onComment: (id: string, comment: string) => void; onViewChange: (view: 'feed' | 'profile') => void; onEditProfile: () => void; cloudPanel: ReactNode }) {
   const [replyingTo, setReplyingTo] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const myPosts = posts.filter(post => post.userId === userId)
-  if (view === 'profile') return <><section className="profile-page"><button className="profile-nav-button back-button" onClick={() => onViewChange('feed')}>返回社区</button><button className="profile-nav-button edit-profile-button" onClick={onEditProfile}>编辑资料</button><div className="profile-avatar">{profile.avatarImage ? <img src={profile.avatarImage} alt="我的头像" /> : profile.avatarLabel}</div><p className="eyebrow">个人主页</p><h1>{profile.nickname}的创作角落</h1><p className="profile-note">资料已保存在当前设备；接入账号后会同步至云端。</p><div className="badges"><span>连续记录者</span><span>社区新朋友</span></div></section><section className="section"><p className="eyebrow">我的发帖</p>{myPosts.length ? myPosts.map(post => <article className="post mine" key={post.id}><p className="post-content">{post.content}</p><small>{post.createdAt} · {post.likes} 次喜欢</small></article>) : <p className="empty">你还没有发布内容。去社区说说正在经历的创作吧。</p>}</section></>
-  return <><section className="page-head community-head"><p className="eyebrow">创作者社区</p><h1>说说你正在<br />经历的创作。</h1><div className="community-actions"><button className="profile-nav-button" onClick={() => onViewChange('profile')}>我的</button><button className="primary compact" onClick={onAdd}>发布</button></div></section><div className="post-list">{posts.map(post => { const isMine = post.userId === userId; const author = isMine ? profile.nickname : post.author; const avatar = isMine ? profile.avatarLabel : post.avatar; return <article className="post" key={post.id}><div className="post-author"><span className="avatar">{avatar}</span><div><strong>{author}</strong><small>{post.createdAt}</small></div></div><p className="post-content">{post.content}</p>{post.image && <img className="post-image" src={post.image} alt={post.imageCaption || '社区图片'} />}{!post.image && post.imageCaption && <div className="post-image">{post.imageCaption}</div>}<div className="post-actions"><button className={post.liked ? 'liked' : ''} onClick={() => onLike(post.id)}>喜欢 {post.likes}</button><button onClick={() => setReplyingTo(replyingTo === post.id ? null : post.id)}>回应 {post.comments.length}</button></div>{replyingTo === post.id && <form className="reply-form" onSubmit={event => { event.preventDefault(); onComment(post.id, draft.trim()); setDraft(''); setReplyingTo(null) }}><input value={draft} onChange={event => setDraft(event.target.value)} placeholder="写下你的回应" autoFocus /><button disabled={!draft.trim()}>发送</button></form>}{post.comments.slice(-2).map((comment, index) => <p className="comment" key={index}>{comment}</p>)}</article> })}</div></>
+  if (view === 'profile') return <><section className="profile-page"><button className="profile-nav-button back-button" onClick={() => onViewChange('feed')}>返回社区</button><button className="profile-nav-button edit-profile-button" onClick={onEditProfile}>编辑资料</button><div className="profile-avatar">{profile.avatarImage ? <img src={profile.avatarImage} alt="我的头像" /> : profile.avatarLabel}</div><p className="eyebrow">个人主页</p><h1>{profile.nickname}的创作角落</h1><p className="profile-note">资料已保存在当前设备；接入账号后会同步至云端。</p>{cloudPanel}<div className="badges"><span>连续记录者</span><span>社区新朋友</span></div></section><section className="section"><p className="eyebrow">我的发帖</p>{myPosts.length ? myPosts.map(post => <article className="post mine" key={post.id}><p className="post-content">{post.content}</p><small>{formatPostTime(post.createdAt)} · {post.likes} 次喜欢</small></article>) : <p className="empty">你还没有发布内容。去社区说说正在经历的创作吧。</p>}</section></>
+  return <><section className="page-head community-head"><p className="eyebrow">创作者社区</p><h1>说说你正在<br />经历的创作。</h1><div className="community-actions"><button className="profile-nav-button" onClick={() => onViewChange('profile')}>我的</button><button className="primary compact" onClick={onAdd}>发布</button></div></section><div className="post-list">{posts.map(post => { const isMine = post.userId === userId; const author = isMine ? profile.nickname : post.author; const avatar = isMine ? profile.avatarLabel : post.avatar; return <article className="post" key={post.id}><div className="post-author"><span className="avatar">{avatar}</span><div><strong>{author}</strong><small>{formatPostTime(post.createdAt)}</small></div></div><p className="post-content">{post.content}</p>{post.image && <img className="post-image" src={post.image} alt={post.imageCaption || '社区图片'} />}{!post.image && post.imageCaption && <div className="post-image">{post.imageCaption}</div>}<div className="post-actions"><button className={post.liked ? 'liked' : ''} onClick={() => onLike(post.id)}>喜欢 {post.likes}</button><button onClick={() => setReplyingTo(replyingTo === post.id ? null : post.id)}>回应 {post.comments.length}</button></div>{replyingTo === post.id && <form className="reply-form" onSubmit={event => { event.preventDefault(); onComment(post.id, draft.trim()); setDraft(''); setReplyingTo(null) }}><input value={draft} onChange={event => setDraft(event.target.value)} placeholder="写下你的回应" autoFocus /><button disabled={!draft.trim()}>发送</button></form>}{post.comments.slice(-2).map((comment, index) => <p className="comment" key={index}>{comment}</p>)}</article> })}</div></>
 }
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) { return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><section className="modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()}><button className="close" type="button" onClick={onClose}>关闭</button><h2>{title}</h2>{children}</section></div> }

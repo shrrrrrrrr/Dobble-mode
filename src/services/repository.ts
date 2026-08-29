@@ -8,6 +8,8 @@ export type AppState = {
   posts: Post[]
   profile: UserProfile
   theme: ThemeId
+  /** Last write timestamp (ISO). Used by cloud sync for last-write-wins. */
+  updatedAt?: string
 }
 
 export interface AppRepository {
@@ -76,6 +78,6 @@ export class LocalAppRepository implements AppRepository {
   }
 
   async save(state: AppState): Promise<void> {
-    this.storage.setItem(this.key, JSON.stringify(state))
+    this.storage.setItem(this.key, JSON.stringify({ ...state, updatedAt: new Date().toISOString() }))
   }
 }
