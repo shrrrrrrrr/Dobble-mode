@@ -7,7 +7,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "node ./node_modules/typescript/bin/tsc -b && node ./node_modules/vite/bin/vite.js build",
     "preview": "node ./node_modules/vite/bin/vite.js preview --host 0.0.0.0",
-    "verify": "node ./scripts/verify-v1.6.mjs",
+    "verify": "node ./scripts/verify-final.mjs",
     "handoff": "node ./scripts/update-handoff.mjs"
   },
   "dependencies": {

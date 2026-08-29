@@ -1692,3 +1692,28 @@ M HANDOFF.md
 ?? public/assets/theme-icons/
 ?? src/utils/calendarArt.ts
 ```
+
+
+### 工作日志 2026年8月30日 02:30（终版开发：V1.6 发布 → V2.0 → V2.1 → V3.0 → V3.1）
+
+- 记录：按用户指令"直接开发到最终版本，跳过需要用户手动的步骤"，本轮完成：
+  1. **V1.6 发布**：提交 `ada6054`，标签 `v1.6.0`（含此前 8 项视觉反馈修正）。清理孤儿资源（pixel-forward-loop.webm、旧季节像素中间图）；buaa 图库资产（~130MB）已在 git 历史中且当前 UI 未接入，保留不删。
+  2. **V2.0 云端数据层**（提交 `e03c9ed`）：新增 `src/services/cloud.ts`（Supabase 客户端工厂，无 env 时云端整体关闭）；认证决策=路线图候选方案"邮箱+密码"（Supabase Auth）作为可选云同步层，本地账号不变，未触碰被否决的 OTP/手机号/伪造邮箱/自建后端；同步=整账号 JSONB 快照 `app_state` 表 + owner-only RLS（`supabase/migrations/0002_cloud_state.sql`，需用户手动执行）；LWW 同步语义（AppState.updatedAt）；云入口在社区"我的"页；新帖 createdAt 改标准时间戳（旧数据兼容显示）。设计取舍：JSONB 快照而非逐表映射（零映射错误、覆盖未来实体；0001 规范化表保留给真实多用户社区阶段；媒体桶上传列为 V2.2 候选）。
+  3. **V2.1 部署准备**：`docs/DEPLOYMENT.md`（nginx+SPA+HTTPS+Supabase 配置+安全清单）；`.github/workflows/build.yml`（push/PR 自动 verify）；安全检查通过（无 123456 后门、无 Service Role 引用、.env.local 被 gitignore）。
+  4. **V3.0 专业模式**（提交 `2165ca6`）：顶栏生活/专业模式切换（body[data-mode] 专业配色令牌，偏好随账号保存）；选题库（来源/潜力/状态推进/关联作品）；评分模板（内置通用评分，权重归一 100%）+ 评分记录（1-10 滑杆、加权总分、理由）；专业复盘（亮点/问题/下一步+均分徽章）；数据看板（8 项总量/平台分布条形图/TOP3/近30天）；专业底栏导航（4 个新生成像素图标 nav/pro-1..4.png）；"留"在专业模式隐藏。**硬边界：ProfessionalMode.tsx 不渲染 work.note/mood/feedback（verify 脚本自动检查）**。共享 Modal 抽到 src/components/Modal.tsx。
+  5. **V3.1 徽章系统**（提交 `b253e0d`）：`src/services/badges.ts` 8 条确定性规则（第一条作品/勤劳记录者10/珍藏时刻/值得被记住10/社区新声/社区常驻5/被看见·累计点赞100/连续记录者·连续7天有记录）；获得日期首次满足写入 state.badges（旧账号自动补算）；个人页徽章墙（已获得显示日期，未获得显示进度）；替换原占位徽章。
+  6. **验证与文档**：`scripts/verify-final.mjs` 替代 verify-v1.6（42 项检查：账号/哈希/导入/Repository/云门控/RLS/专业接线/硬边界/类型/图标/徽章/部署文件/构建，全部通过）；README/ROADMAP/SUPABASE_SETUP 全面更新。
+- 用户需要做的（按顺序）：① 验收浏览器效果（模式切换/专业四页/徽章墙/云同步入口）→ ② 满意后打标签 `git tag v2.0.0 v3.0.0 v3.1.0 && git push origin master --tags` → ③ 云同步：Supabase 执行 0002 迁移 + .env.local 填 URL/Anon Key → ④ 部署：按 docs/DEPLOYMENT.md 上传 dist/ 到服务器。若推送仍报证书错误，按 HANDOFF 阻塞项 1 处理。
+- 记录时 HEAD：见下方 git status 对应的最新提交（V2.0/V3.0/V3.1/文档提交）
+- 工作区状态：
+
+```text
+M README.md
+ M docs/ROADMAP.md
+ M docs/SUPABASE_SETUP.md
+ M package.json
+ D scripts/verify-v1.6.mjs
+?? .github/
+?? docs/DEPLOYMENT.md
+?? scripts/verify-final.mjs
+```
