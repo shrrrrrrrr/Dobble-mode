@@ -83,5 +83,5 @@ docs/
 
 - 主分支：`master`
 - 版本标签：`v1.0.0`、`v1.3.0`、`v1.4.0`、`v1.5.0` 等，见 [docs/ROADMAP.md](docs/ROADMAP.md)
-- V1.5 已完成用户验收并发布：提交 `4012d7c`，标签 `v1.5.0`
+- V1.5 已完成用户验收并发布：功能提交 `d71b363`，标签 `v1.5.0`
 - 专业模式参考仓库 [creator-topic-library](https://github.com/shrrrrrrrr/creator-topic-library)，不作为本仓库推送目标
