@@ -33,7 +33,7 @@ export function normalizeAppState(userId: string, parsed?: Partial<AppState> | n
     ? { ...initialProfile, ...source.profile }
     : { ...initialProfile }
   const posts = Array.isArray(source.posts) ? source.posts.filter(isPost) : []
-  const theme = source.theme === 'cream' ? 'cream' : 'mint'
+  const theme = source.theme === 'cream' || source.theme === 'night' ? source.theme : 'mint'
   return {
     ...emptyAppState(),
     ...source,

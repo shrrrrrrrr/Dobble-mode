@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono&family=Pixelify+Sans:wght@500;600;700&family=Silkscreen:wght@400;700&family=M+PLUS+Rounded+1c:wght@400;500;700&family=ZCOOL+KuaiLe&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono&family=Pixelify+Sans:wght@500;600;700&family=Silkscreen:wght@400;700&family=M+PLUS+Rounded+1c:wght@400;500;700&family=ZCOOL+KuaiLe&family=Ma+Shan+Zheng&display=swap');
 
 :root { --canvas:#dcefe6; --paper:#f6fbf7; --ink:#243a36; --muted:#71827d; --line:#cfe2da; --green:#2caa97; --orange:#ef825e; --yellow:#f1c96b; --white:#fcfffd; font-family:'M PLUS Rounded 1c','YouYuan','Microsoft YaHei',sans-serif; color:var(--ink); background:var(--canvas); }
 * { box-sizing:border-box; }
@@ -99,7 +99,6 @@ h1 { font-size:38px; }
 .clock-widget::after { content:'●'; position:absolute; color:var(--orange); font-size:13px; transform:translateY(1px); }
 .calendar-widget { position:relative; min-height:142px; padding:44px 17px 15px; text-align:center; background:rgba(255,255,255,.7); }
 .calendar-widget::before { content:'TODAY'; position:absolute; top:0; left:0; right:0; padding:8px; color:#fff; background:var(--green); border-bottom:3px solid var(--ink); font:700 12px 'Silkscreen',monospace; }
-.calendar-widget p { position:absolute; top:22px; left:0; right:0; margin:0; font-size:10px; opacity:.8; }
 .week-row,.date-grid { display:none; }
 .calendar-widget::after { content:attr(data-today); display:block; color:var(--ink); font:700 48px 'Silkscreen',monospace; }
 .companion { border:3px solid rgba(255,255,255,.82); border-radius:0; background:var(--orange); font-family:'ZCOOL KuaiLe','M PLUS Rounded 1c',sans-serif; font-weight:700; box-shadow:5px 5px 0 rgba(23,59,88,.22); }
@@ -110,15 +109,13 @@ h1 { font-size:38px; }
 .season-pixels { position:absolute; inset:0; background:repeating-linear-gradient(0deg,rgba(255,255,255,.05) 0 1px,transparent 1px 5px),repeating-linear-gradient(90deg,rgba(18,62,91,.04) 0 1px,transparent 1px 5px); mix-blend-mode:soft-light; animation:pixel-drift 8s linear infinite; }
 .season-spring { filter:saturate(1.08) hue-rotate(-4deg); }.season-summer { filter:saturate(1.12) contrast(1.04); }.season-autumn { filter:saturate(.98) contrast(1.05); }.season-winter { filter:saturate(.78) brightness(1.08); }
 .season-spring .season-pixels,.season-summer .season-pixels,.season-autumn .season-pixels { animation:leaf-breeze 4.5s ease-in-out infinite alternate; }
-.snow-layer { display:none; }.season-winter .snow-layer { display:block; position:absolute; inset:0; opacity:.72; background-image:radial-gradient(circle,#fff 0 2px,transparent 3px),radial-gradient(circle,#fff 0 1px,transparent 2px); background-size:83px 97px,47px 61px; animation:snow-fall 9s linear infinite; }
 .season-switcher { display:flex; gap:5px; padding:4px; border:2px solid var(--line); background:rgba(255,255,255,.62); box-shadow:3px 3px 0 rgba(23,59,88,.15); }
 .season-switcher button { min-width:32px; padding:5px 7px; color:var(--ink); background:transparent; border-bottom:3px solid transparent; font-weight:700; }
 .season-switcher button.active { color:#fff; background:var(--season-accent); border-bottom-color:var(--ink); }
 @keyframes season-breathe { from { transform:scale(1); } to { transform:scale(1.018); } }
 @keyframes pixel-drift { from { transform:translate(0,0); } to { transform:translate(5px,3px); } }
 @keyframes leaf-breeze { from { transform:translateX(-2px) skewX(-.2deg); } to { transform:translateX(2px) skewX(.2deg); } }
-@keyframes snow-fall { from { background-position:0 -80px,20px -50px; } to { background-position:55px 100vh, -25px 100vh; } }
-@media (prefers-reduced-motion:reduce) { .season-background,.season-pixels,.snow-layer { animation:none; } }
+@media (prefers-reduced-motion:reduce) { .season-background,.season-pixels { animation:none; } }
 @media (max-width:780px) { .app-shell { padding:8px; }.content { padding-inline:10px; }.topbar { padding-inline:8px; }.season-switcher { order:5; width:100%; justify-content:center; }.clock-widget strong { width:92px; height:92px; }.calendar-widget::after { font-size:40px; } }
 @media (max-width:560px) { .bottom-nav { bottom:8px; }.mobile-frame { padding-bottom:94px; }.brand { min-width:54px; }.mode-pill { display:none; } }
 
@@ -128,10 +125,76 @@ h1 { font-size:38px; }
 .season-background::after { content:''; position:absolute; inset:0; background:linear-gradient(180deg,rgba(18,62,91,.08),rgba(18,62,91,.22)); }
 .season-pixels { position:absolute; inset:0; background:repeating-linear-gradient(0deg,rgba(255,255,255,.05) 0 1px,transparent 1px 5px),repeating-linear-gradient(90deg,rgba(18,62,91,.04) 0 1px,transparent 1px 5px); animation:pixel-drift 8s linear infinite; }
 .season-spring,.season-summer,.season-autumn { filter:saturate(1.05) contrast(1.04); }.season-winter { filter:saturate(.78) brightness(1.08); }
-.snow-layer { display:none; }.season-winter .snow-layer { display:block; position:absolute; inset:0; opacity:.7; background-image:radial-gradient(circle,#fff 0 2px,transparent 3px),radial-gradient(circle,#fff 0 1px,transparent 2px); background-size:83px 97px,47px 61px; animation:snow-fall 9s linear infinite; }
 .brand { display:inline-grid; place-items:center; padding:7px 10px; color:var(--ink); background:rgba(255,255,255,.58); border:2px solid var(--line); box-shadow:3px 3px 0 rgba(23,59,88,.14); font-family:'ZCOOL KuaiLe','M PLUS Rounded 1c',sans-serif; font-weight:700; }
 .clock-widget { position:relative; display:flex; flex-direction:column; align-items:center; text-align:center; background:rgba(255,255,255,.72); }.clock-widget strong { width:108px; height:108px; position:relative; margin:12px 0; border:5px solid var(--ink); border-radius:50%; background:rgba(255,255,255,.96); color:transparent; font-size:0; box-shadow:inset 0 0 0 5px var(--line),4px 4px 0 rgba(23,59,88,.16); }.clock-widget strong::before,.clock-widget strong::after { content:''; position:absolute; left:50%; bottom:50%; width:4px; background:var(--ink); transform-origin:50% 100%; }.clock-widget strong::before { height:29px; transform:translateX(-50%) rotate(35deg); }.clock-widget strong::after { height:39px; background:var(--green); transform:translateX(-50%) rotate(125deg); }.calendar-widget { position:relative; min-height:142px; padding-top:42px; background:rgba(255,255,255,.74); text-align:center; }.calendar-widget::before { content:'TODAY'; position:absolute; top:0; left:0; right:0; padding:8px; color:#fff; background:var(--green); border-bottom:3px solid var(--ink); font:700 12px 'Silkscreen',monospace; }.calendar-widget::after { content:attr(data-today); display:block; color:var(--ink); font:700 48px 'Silkscreen',monospace; }.calendar-widget .week-row,.calendar-widget .date-grid { display:none; }
 .bottom-nav { background:rgba(255,255,255,.95); border:2px solid var(--line); }.nav-mark { width:24px; height:24px; border-radius:0; background-repeat:no-repeat; background-position:center; background-size:contain; image-rendering:pixelated; }.bottom-nav button:nth-child(1) .nav-mark { background-image:url('/assets/nav/1.png'); }.bottom-nav button:nth-child(2) .nav-mark { background-image:url('/assets/nav/2.png'); }.bottom-nav button:nth-child(3) .nav-mark { background-image:url('/assets/nav/3.png'); }.bottom-nav button:nth-child(4) .nav-mark { background-image:url('/assets/nav/4.png'); }
 .tile-interactive,.hero,.page-head,.profile-page,.post,.latest-tile,.calendar-widget,.clock-widget,.metric-widget,.creator-aside,.aside-note,.brand { transition:transform 180ms ease,box-shadow 180ms ease,filter 180ms ease; }.tile-interactive:hover,.hero:hover,.page-head:hover,.profile-page:hover,.post:hover,.latest-tile:hover,.calendar-widget:hover,.clock-widget:hover,.metric-widget:hover,.creator-aside:hover,.aside-note:hover,.brand:hover { transform:translateY(-3px); filter:saturate(1.06); box-shadow:7px 7px 0 rgba(23,59,88,.2); }
-@keyframes season-breathe { from { transform:scale(1); } to { transform:scale(1.018); } } @keyframes pixel-drift { from { transform:translate(0,0); } to { transform:translate(5px,3px); } } @keyframes snow-fall { from { background-position:0 -80px,20px -50px; } to { background-position:55px 100vh,-25px 100vh; } }
-@media (prefers-reduced-motion:reduce) { .season-background,.season-pixels,.snow-layer { animation:none; } }
+@keyframes season-breathe { from { transform:scale(1); } to { transform:scale(1.018); } } @keyframes pixel-drift { from { transform:translate(0,0); } to { transform:translate(5px,3px); } }
+@media (prefers-reduced-motion:reduce) { .season-background,.season-pixels { animation:none; } }
+
+/* Third theme: keep the reference page untouched; only use its copied background asset. */
+body[data-theme='night'] { --canvas:#f1d9e4; --paper:rgba(255,249,252,.93); --ink:#552f4a; --muted:#8f607f; --line:rgba(255,255,255,.82); --green:#b85b88; --orange:#dc7999; --yellow:#e7adbf; --shadow:rgba(92,45,76,.24); background:#f1d9e4; }
+.sakura-background { position:fixed; inset:0; z-index:-2; background:url('/assets/sakura/background.jpg') center/cover no-repeat; filter:saturate(1.16) brightness(1.1) contrast(1.03); }
+.sakura-background::after { content:''; position:absolute; inset:0; background:linear-gradient(180deg,rgba(255,239,247,.08),rgba(84,37,70,.17)); }
+.theme-dot { overflow:hidden; background-image:url('/assets/theme-icons/crayon-shinchan.png'); background-size:cover; background-position:center; }
+.theme-dot.cream { background-image:url('/assets/theme-icons/beihang-badge.jpg'); background-size:cover; }
+.theme-dot.night { background-image:url('/assets/sakura/background.jpg'); background-size:cover; }
+body[data-theme='cream'] .primary, body[data-theme='cream'] .profile-nav-button { background:#347fbd; color:#fff; }
+body[data-theme='night'] .primary, body[data-theme='night'] .profile-nav-button { background:#b85b88; color:#fff; }
+.modal-backdrop { z-index:100; background:rgba(30,24,38,.48); backdrop-filter:blur(2px); }
+.modal { position:relative; z-index:101; border:3px solid var(--line); background:var(--paper); color:var(--ink); box-shadow:8px 8px 0 rgba(48,28,48,.22); }
+.entry-form input,.entry-form textarea,.entry-form select { background:rgba(255,255,255,.96); color:var(--ink); }
+.bottom-nav { z-index:30; background:rgba(255,255,255,.97); }.bottom-nav button { color:var(--ink); font-weight:800; }.bottom-nav button .nav-mark { filter:contrast(1.25) saturate(1.2); opacity:1; }.bottom-nav button.active { color:var(--green); background:rgba(205,239,235,.7); }.bottom-nav button.active .nav-mark { transform:scale(1.16); filter:contrast(1.5) saturate(1.35) drop-shadow(1px 1px 0 rgba(23,59,88,.35)); }
+.clock-widget strong { background:rgba(255,255,255,.98); }
+.calendar-widget { background:rgba(255,255,255,.82); }
+
+/* Flexible hand-drawn typography while keeping pixel numbers and controls. */
+:root,body,button,input,textarea,select { font-family:'Ma Shan Zheng','ZCOOL KuaiLe','M PLUS Rounded 1c','YouYuan','Microsoft YaHei',sans-serif; }
+h1,h2,h3,.brand,.companion span,.post-content,.work-copy { font-family:'Ma Shan Zheng','ZCOOL KuaiLe','YouYuan',sans-serif; font-weight:700; }
+.eyebrow,.clock-widget strong,.calendar-widget::after,.metric-widget strong { font-family:'Silkscreen','Pixelify Sans',monospace; }
+
+/* Feedback pass: real-time pixel hands, image-only desk calendar, larger theme previews. */
+.theme-dot { width:46px; height:46px; border:3px solid rgba(255,255,255,.92); box-shadow:4px 4px 0 rgba(23,59,88,.2); }
+.theme-dot.active { outline:3px solid var(--ink); transform:scale(1.08); }
+.pixel-clock { display:block; overflow:visible; }
+.pixel-clock::before,.pixel-clock::after { display:none; }
+.pixel-clock .clock-hour,.pixel-clock .clock-minute,.pixel-clock .clock-second { display:block; position:absolute; left:50%; bottom:50%; width:5px; transform-origin:50% 100%; background:var(--ink); image-rendering:pixelated; }
+.pixel-clock .clock-hour { height:27px; transform:translateX(-50%) rotate(var(--hour-angle)); }
+.pixel-clock .clock-minute { height:39px; background:var(--green); transform:translateX(-50%) rotate(var(--minute-angle)); }
+.pixel-clock .clock-second { height:45px; width:3px; background:var(--orange); transform:translateX(-50%) rotate(var(--second-angle)); }
+.pixel-clock .clock-center { position:absolute; left:50%; top:50%; width:10px; height:10px; transform:translate(-50%,-50%); background:var(--orange); border:2px solid var(--ink); }
+.calendar-widget { min-height:176px; padding:0; border:0; background:transparent; box-shadow:none; overflow:visible; }
+.calendar-widget::before,.calendar-widget::after { display:none; }
+.calendar-widget img { display:block; width:100%; height:126px; object-fit:cover; image-rendering:auto; }
+.sakura-background::after { z-index:0; }
+.season-background { image-rendering:auto; }
+.season-background::before { content:''; position:absolute; inset:0; background:inherit; image-rendering:pixelated; opacity:.04; }
+@media (max-width:780px) { .theme-dot { width:40px; height:40px; }.calendar-widget img { height:112px; } }
+
+/* Final feedback overrides */
+.theme-dot { width:60px; height:60px; }
+.pixel-clock { border-radius:0 !important; clip-path:polygon(8% 0,92% 0,100% 8%,100% 92%,92% 100%,8% 100%,0 92%,0 8%); }
+.calendar-widget { min-height:170px; background:transparent; }
+.calendar-widget img { height:145px; object-fit:cover; border:0; box-shadow:none; }
+@media (max-width:780px) { .theme-dot { width:50px; height:50px; } .calendar-widget img { height:126px; } }
+
+/* Bottom nav icons: bold pixel masks, larger size; icon stays visible and turns theme blue together with the label when active. */
+.bottom-nav button { gap:5px; }
+.bottom-nav .nav-mark { display:block; width:30px; height:30px; border-radius:0; background-color:#5d746e; background-image:none !important; filter:none; transform:none; }
+.bottom-nav button:nth-child(1) .nav-mark { -webkit-mask:url('/assets/nav/1.png') center/contain no-repeat; mask:url('/assets/nav/1.png') center/contain no-repeat; }
+.bottom-nav button:nth-child(2) .nav-mark { -webkit-mask:url('/assets/nav/2.png') center/contain no-repeat; mask:url('/assets/nav/2.png') center/contain no-repeat; }
+.bottom-nav button:nth-child(3) .nav-mark { -webkit-mask:url('/assets/nav/3.png') center/contain no-repeat; mask:url('/assets/nav/3.png') center/contain no-repeat; }
+.bottom-nav button:nth-child(4) .nav-mark { -webkit-mask:url('/assets/nav/4.png') center/contain no-repeat; mask:url('/assets/nav/4.png') center/contain no-repeat; }
+.bottom-nav button.active .nav-mark { background-color:var(--green); transform:scale(1.08); filter:none; }
+
+/* Topbar account summary and sign-out as standard pixel buttons, larger and bold. */
+.account-summary { gap:8px; color:var(--ink); font-size:13px; font-weight:700; }
+.account-summary span { max-width:190px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:8px 12px; color:var(--ink); background:rgba(255,255,255,.58); border:2px solid var(--line); box-shadow:3px 3px 0 rgba(23,59,88,.14); }
+.account-summary button { padding:8px 12px; color:#fff; background:var(--green); border:2px solid rgba(255,255,255,.75); box-shadow:4px 4px 0 rgba(23,59,88,.16); font-size:13px; font-weight:700; transition:transform 180ms ease, box-shadow 180ms ease, filter 180ms ease; }
+.account-summary button:hover { transform:translateY(-2px); filter:saturate(1.08); box-shadow:5px 5px 0 rgba(23,59,88,.22); }
+.account-summary button:active { transform:translateY(1px) scale(.97); }
+
+/* Profile page nav buttons share the same hover/active feedback as other pixel tiles. */
+.profile-nav-button { transition:transform 180ms ease, box-shadow 180ms ease, filter 180ms ease; }
+.profile-nav-button:hover { transform:translateY(-3px); box-shadow:7px 7px 0 rgba(23,59,88,.2); filter:saturate(1.06); }
+.profile-nav-button:active { transform:translateY(1px) scale(.97); }

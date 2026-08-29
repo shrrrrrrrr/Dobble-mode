@@ -1598,3 +1598,97 @@ M HANDOFF.md
 ?? scripts/verify-v1.6.mjs
 ?? src/services/repository.ts
 ```
+
+
+### 工作日志 2026年8月29日 19:42
+
+- 记录：修复作品/社区弹窗事件隔离并确认三处入口均渲染 Modal；明确当前为 LocalAppRepository + LocalStorage，未接入 Supabase 云端；切换为用户指定春夏秋冬图片并生成像素版本；加入蜡笔小新、北航校徽、台历参考图和第三主题樱花背景；构建及 verify 通过（13 passed, 0 failed）。
+- 记录时 HEAD：`cd5376c`
+- 工作区状态：
+
+```text
+M public/assets/seasons/autumn.jpg
+ M public/assets/seasons/spring.jpg
+ M public/assets/seasons/summer.jpg
+ M public/assets/seasons/winter.jpg
+ M src/App.tsx
+ M src/services/repository.ts
+ M src/styles.css
+ M src/theme.ts
+?? public/assets/calendar/
+?? public/assets/sakura/
+?? public/assets/seasons/autumn-pixel.jpg
+?? public/assets/seasons/spring-pixel.jpg
+?? public/assets/seasons/summer-pixel.jpg
+?? public/assets/seasons/winter-pixel.jpg
+?? public/assets/theme-icons/
+```
+
+
+### 工作日志 2026年8月29日 20:07
+
+- 记录：根据用户反馈：时钟改为随当前时间转动的像素指针钟；台历改为仅展示参考图和当天日期，删除 TODAY 与外围白框；主题按钮放大并使用主题图片；北航四季保留用户指定原图，同时使用更高采样率像素派生图提高画面清晰度；第三主题删除花瓣图形，改为离散像素块按曲线轨迹飘落。npm run build 与 npm run verify 均通过（13 passed, 0 failed）。
+- 记录时 HEAD：`cd5376c`
+- 工作区状态：
+
+```text
+M HANDOFF.md
+ M public/assets/seasons/autumn.jpg
+ M public/assets/seasons/spring.jpg
+ M public/assets/seasons/summer.jpg
+ M public/assets/seasons/winter.jpg
+ M src/App.tsx
+ M src/services/repository.ts
+ M src/styles.css
+ M src/theme.ts
+?? public/assets/calendar/
+?? public/assets/sakura/
+?? public/assets/seasons/autumn-pixel.jpg
+?? public/assets/seasons/spring-pixel.jpg
+?? public/assets/seasons/summer-pixel.jpg
+?? public/assets/seasons/winter-pixel.jpg
+?? public/assets/theme-icons/
+```
+
+
+### 工作日志 2026年8月30日 00:20
+
+- 记录：按用户 8 项反馈完成视觉修订：1) 删除第三主题（樱花夜）像素块飘落效果（JSX span 与 CSS 动画/图案全部移除，背景本体保留）；2) 删除第二主题（北航四季）冬季雪花飘落效果；3) 第二主题 4 张背景图重新像素化，像素块由 8px 增大到 12px 并做 32 级颜色量化（新文件 `public/assets/seasons/*-pixel-v2.png`，`theme.ts` 已改引用），季节原图未动；4) 底栏图标用 Pillow 重制为 64x64 加粗线条白色 PNG，CSS 改为 mask 染色方案，图标 30px、active 时不消失且与文字一起变 `var(--green)` 蓝；5) 日历改为 canvas 合成图：离线生成像素化无日期底图 `public/assets/calendar/desk-calendar-clean.png`（8px 像素块、原日期区已清除），新增 `src/utils/calendarArt.ts` 运行时将真实日期（月.日，5x7 点阵、深棕 #5b4236）绘制进图片本体，Home 组件删除数字/文字覆盖层，不再叠加阿拉伯数字；6) "我的"页面"编辑资料/返回社区/我的"按钮补齐 hover/active 像素微交互；7) 右上角账号名与退出按钮改为标准像素按钮样式（边框+阴影+加粗 13px），退出按钮带悬停动效；8) 主题一背景视频重做为纯正放 5 秒（弃用正放+倒放 boomerang 方案），裁掉原视频黑边，结尾 0.8s 与开头交叉淡化使循环衔接自然（首尾帧差 18.5→9.1），640x360 像素网格放大 1920x1080、12fps、VP9、1.4MB，poster 同步替换。视频源为 `C:\Users\shr\Desktop\UI\8月28日.mp4`，素材经 ffmpeg/Pillow 离线处理。
+- 验证：`npm run build` 通过；`npm run verify` 13 passed / 0 failed；dev server 各资源 200；日历日期点阵与底栏图标加粗效果经脚本模拟验证。待用户浏览器视觉验收（尤其季节图像素化程度是否与主题一观感一致、视频循环衔接、日历日期布局）。
+- 记录时 HEAD：`cd5376c`
+- 工作区状态：
+
+```text
+M HANDOFF.md
+ M public/assets/nav/1.png
+ M public/assets/nav/2.png
+ M public/assets/nav/3.png
+ M public/assets/nav/4.png
+ M public/assets/pixel-loop-preview.png
+ M public/assets/pixel-loop.webm
+ M public/assets/seasons/autumn.jpg
+ M public/assets/seasons/spring.jpg
+ M public/assets/seasons/summer.jpg
+ M public/assets/seasons/winter.jpg
+ M src/App.tsx
+ M src/services/repository.ts
+ M src/styles.css
+ M src/theme.ts
+?? public/assets/calendar/
+?? public/assets/pixel-forward-loop.webm
+?? public/assets/sakura/
+?? public/assets/seasons/autumn-pixel-large.jpg
+?? public/assets/seasons/autumn-pixel-v2.png
+?? public/assets/seasons/autumn-pixel.jpg
+?? public/assets/seasons/spring-pixel-large.jpg
+?? public/assets/seasons/spring-pixel-v2.png
+?? public/assets/seasons/spring-pixel.jpg
+?? public/assets/seasons/summer-pixel-large.jpg
+?? public/assets/seasons/summer-pixel-v2.png
+?? public/assets/seasons/summer-pixel.jpg
+?? public/assets/seasons/winter-pixel-large.jpg
+?? public/assets/seasons/winter-pixel-v2.png
+?? public/assets/seasons/winter-pixel.jpg
+?? public/assets/theme-icons/
+?? src/utils/calendarArt.ts
+```
