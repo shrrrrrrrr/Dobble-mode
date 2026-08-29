@@ -1,5 +1,5 @@
 import { FormEvent, PointerEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
-import type { FeedbackEvent, Platform, Post, Tab, UserProfile, Work } from './types'
+import type { FeedbackEvent, Platform, Post, ProfessionalTab, Tab, UserProfile, Work } from './types'
 import { compressImage } from './utils/image'
 import { buildCalendarArt } from './utils/calendarArt'
 import { AppSession, getSession, registerLocalAccount, signInLocalAccount, signOut } from './services/auth'
@@ -7,6 +7,8 @@ import { importLegacyV1Data, markLegacyDismissed, markLegacyImported, shouldOffe
 import { emptyAppState, LocalAppRepository, normalizeAppState, type AppState } from './services/repository'
 import { cloudEnabled, cloudSignIn, cloudSignOut, cloudSignUp, fetchCloudState, getCloudAccount, pushCloudState, type CloudAccount } from './services/cloud'
 import { seasonPacks, themePacks, type SeasonId, type ThemeId } from './theme'
+import { ProfessionalMode } from './professional/ProfessionalMode'
+import { Modal } from './components/Modal'
 
 function storageErrorMessage(error: unknown) {
   if (error instanceof DOMException && (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
@@ -64,6 +66,7 @@ export default function App() {
   const [season, setSeason] = useState<SeasonId>('autumn')
   const repository = useMemo(() => session ? new LocalAppRepository(session.userId) : null, [session?.userId])
   const [tab, setTab] = useState<Tab>('home')
+  const [proTab, setProTab] = useState<ProfessionalTab>('topics')
   const [showWorkForm, setShowWorkForm] = useState(false)
   const [showPostForm, setShowPostForm] = useState(false)
   const [showProfileForm, setShowProfileForm] = useState(false)
@@ -113,6 +116,7 @@ export default function App() {
     }
   }, [repository, session, state, stateUserId])
   useEffect(() => { document.body.dataset.theme = state.theme }, [state.theme])
+  useEffect(() => { document.body.dataset.mode = state.mode }, [state.mode])
   useEffect(() => { const timer = window.setInterval(() => setClock(new Date()), 1000); return () => window.clearInterval(timer) }, [])
   useEffect(() => { getSession().then(savedSession => { setSession(savedSession); setSessionReady(true) }) }, [])
   useEffect(() => {
@@ -202,6 +206,13 @@ export default function App() {
   function changeTheme(nextTheme: ThemeId) {
     const pack = themePacks.find(item => item.id === nextTheme)
     if (pack?.available) setState(current => ({ ...current, theme: nextTheme }))
+  }
+
+  function switchMode(nextMode: 'life' | 'professional') {
+    setState(current => ({ ...current, mode: nextMode }))
+    setSelectedWork(null)
+    setSelectedRecap(false)
+    setAssistantOpen(false)
   }
 
   async function saveWork(event: FormEvent<HTMLFormElement>) {
@@ -341,6 +352,7 @@ export default function App() {
   }
 
   const nav = [{ id: 'home', label: '首页' }, { id: 'works', label: '作品' }, { id: 'memories', label: '回忆' }, { id: 'community', label: '社区' }] as const
+  const proNav = [{ id: 'topics', label: '选题' }, { id: 'scoring', label: '评分' }, { id: 'review', label: '复盘' }, { id: 'data', label: '数据' }] as const
 
   if (!sessionReady) return <main className="app-shell"><section className="auth-loading">正在打开你的创作桌面...</section></main>
   if (!session) return <LocalAuthPage onAuthenticated={setSession} />
@@ -348,20 +360,22 @@ export default function App() {
   return <main className="app-shell">
     <PixelBackground theme={theme} season={season} />
     <section className="mobile-frame" ref={frameRef}>
-      <header className="topbar"><button className="brand tile-interactive" onClick={() => { setTab('home'); setCommunityView('feed'); setAssistantOpen(false) }} aria-label="留白，返回首页">留白</button><span className="mode-pill">生活模式</span><div className="theme-switcher" aria-label="主题选择"><button className={`theme-dot ${theme === 'mint' ? 'active' : ''}`} onClick={() => { changeTheme('mint'); setAssistantOpen(false) }} title="默认主题" aria-label="默认主题" /><button className={`theme-dot cream ${theme === 'cream' ? 'active' : ''}`} onClick={() => { changeTheme('cream'); setAssistantOpen(false) }} title="北航四季" aria-label="北航四季" /><button className={`theme-dot night ${theme === 'night' ? 'active' : ''}`} onClick={() => { changeTheme('night'); setAssistantOpen(false) }} title="樱花夜" aria-label="樱花夜" /></div>{theme === 'cream' && <div className="season-switcher" aria-label="北航四季选择">{seasonPacks.map(pack => <button key={pack.id} className={season === pack.id ? 'active' : ''} onClick={() => { setSeason(pack.id); setAssistantOpen(false) }} style={{ '--season-accent': pack.accent } as React.CSSProperties}>{pack.name.split(' · ')[0]}</button>)}</div>}<div className="account-summary"><span>{session.username}</span><button onClick={() => { handleSignOut(); setAssistantOpen(false) }}>退出</button></div></header>
+      <header className="topbar"><button className="brand tile-interactive" onClick={() => { if (state.mode === 'professional') { setProTab('topics') } else { setTab('home'); setCommunityView('feed') } setAssistantOpen(false) }} aria-label="留白，返回首页">留白</button><div className="mode-switch" role="tablist" aria-label="模式切换"><button className={state.mode === 'life' ? 'active' : ''} onClick={() => switchMode('life')}>生活</button><button className={state.mode === 'professional' ? 'active' : ''} onClick={() => switchMode('professional')}>专业</button></div><div className="theme-switcher" aria-label="主题选择"><button className={`theme-dot ${theme === 'mint' ? 'active' : ''}`} onClick={() => { changeTheme('mint'); setAssistantOpen(false) }} title="默认主题" aria-label="默认主题" /><button className={`theme-dot cream ${theme === 'cream' ? 'active' : ''}`} onClick={() => { changeTheme('cream'); setAssistantOpen(false) }} title="北航四季" aria-label="北航四季" /><button className={`theme-dot night ${theme === 'night' ? 'active' : ''}`} onClick={() => { changeTheme('night'); setAssistantOpen(false) }} title="樱花夜" aria-label="樱花夜" /></div>{theme === 'cream' && <div className="season-switcher" aria-label="北航四季选择">{seasonPacks.map(pack => <button key={pack.id} className={season === pack.id ? 'active' : ''} onClick={() => { setSeason(pack.id); setAssistantOpen(false) }} style={{ '--season-accent': pack.accent } as React.CSSProperties}>{pack.name.split(' · ')[0]}</button>)}</div>}<div className="account-summary"><span>{session.username}</span><button onClick={() => { handleSignOut(); setAssistantOpen(false) }}>退出</button></div></header>
       <div className="content" onClick={event => { if (assistantOpen && event.target === event.currentTarget) setAssistantOpen(false) }}>
         {notice && <div className="app-notice" role="alert"><span>{notice}</span><button onClick={() => setNotice('')} aria-label="关闭提示">关闭</button></div>}
-        {selectedRecap ? <WeeklyRecap works={recentWorks} feedback={recentFeedback} onClose={() => setSelectedRecap(false)} /> : selectedWork ? <WorkDetail work={selectedWork} feedback={state.feedback.filter((item: FeedbackEvent) => item.workId === selectedWork.id)} onClose={() => setSelectedWork(null)} onSaveNote={updateNote} onFeedback={() => setFeedbackWorkId(selectedWork.id)} /> : <>
+        {state.mode === 'professional' ? <ProfessionalMode tab={proTab} onTabChange={setProTab} works={state.works} topics={state.topics} templates={state.scoreTemplates} records={state.scoreRecords} reviews={state.reviews} onTopicsChange={topics => setState(current => ({ ...current, topics }))} onTemplatesChange={scoreTemplates => setState(current => ({ ...current, scoreTemplates }))} onRecordsChange={scoreRecords => setState(current => ({ ...current, scoreRecords }))} onReviewsChange={reviews => setState(current => ({ ...current, reviews }))} /> : selectedRecap ? <WeeklyRecap works={recentWorks} feedback={recentFeedback} onClose={() => setSelectedRecap(false)} /> : selectedWork ? <WorkDetail work={selectedWork} feedback={state.feedback.filter((item: FeedbackEvent) => item.workId === selectedWork.id)} onClose={() => setSelectedWork(null)} onSaveNote={updateNote} onFeedback={() => setFeedbackWorkId(selectedWork.id)} /> : <>
           {tab === 'home' && <Home profile={state.profile} works={recentWorks} feedback={recentFeedback} dateLabel={todayLabel} clockText={formatClock(clock)} clock={clock} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} onNavigate={nextTab => { setTab(nextTab); if (nextTab === 'community') setCommunityView('feed') }} onOpenProfile={() => { setTab('community'); setCommunityView('profile') }} />}
           {tab === 'works' && <Works works={state.works} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} />}
           {tab === 'memories' && <Memories memories={memories} works={recentWorks} onOpenRecap={() => setSelectedRecap(true)} />}
           {tab === 'community' && <Community userId={session.userId} view={communityView} profile={state.profile} posts={state.posts} onAdd={() => setShowPostForm(true)} onLike={toggleLike} onComment={addComment} onViewChange={setCommunityView} onEditProfile={() => setShowProfileForm(true)} cloudPanel={<CloudSyncPanel account={cloudAccount} busy={cloudBusy} message={cloudMessage} syncedAt={cloudSyncedAt} onSignIn={async (email, password) => { const result = await cloudSignIn(email, password); if (result.ok) { setCloudAccount(result.data); setCloudMessage('') } return result.ok ? null : result.error }} onSignUp={async (email, password) => { const result = await cloudSignUp(email, password); if (result.ok) { setCloudAccount(result.data); setCloudMessage('') } return result.ok ? null : result.error }} onSignOut={handleCloudSignOut} onSyncNow={syncCloudNow} />} />}
         </>}
       </div>
-      {!selectedWork && !selectedRecap && <nav className="bottom-nav">{nav.map(item => <button key={item.id} className={tab === item.id ? 'active' : ''} onClick={() => { setTab(item.id); if (item.id === 'community') setCommunityView('feed') }}><span className="nav-mark" />{item.label}</button>)}</nav>}
+      {!selectedWork && !selectedRecap && (state.mode === 'professional'
+        ? <nav className="bottom-nav pro-nav">{proNav.map(item => <button key={item.id} className={proTab === item.id ? 'active' : ''} onClick={() => setProTab(item.id)}><span className="nav-mark" />{item.label}</button>)}</nav>
+        : <nav className="bottom-nav">{nav.map(item => <button key={item.id} className={tab === item.id ? 'active' : ''} onClick={() => { setTab(item.id); if (item.id === 'community') setCommunityView('feed') }}><span className="nav-mark" />{item.label}</button>)}</nav>)}
     </section>
-    <button className="companion" style={{ transform: `translate(${assistantPos.x}px, ${assistantPos.y}px)` }} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onClick={() => { if (!didDrag.current) setAssistantOpen(open => !open) }} aria-label="打开或关闭创作陪伴"><span>留</span></button>
-    {assistantOpen && <div className="assistant-panel" style={{ transform: `translate(${assistantPos.x}px, ${assistantPos.y}px)` }}><p className="eyebrow">创作陪伴</p><h2>今天也在记录。</h2><p className="assistant-answer">{answer}</p><form onSubmit={askAssistant}><input value={question} onChange={e => setQuestion(e.target.value)} placeholder="问问我关于你的创作" /><button>发送</button></form></div>}
+    {state.mode === 'life' && <button className="companion" style={{ transform: `translate(${assistantPos.x}px, ${assistantPos.y}px)` }} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onClick={() => { if (!didDrag.current) setAssistantOpen(open => !open) }} aria-label="打开或关闭创作陪伴"><span>留</span></button>}
+    {state.mode === 'life' && assistantOpen && <div className="assistant-panel" style={{ transform: `translate(${assistantPos.x}px, ${assistantPos.y}px)` }}><p className="eyebrow">创作陪伴</p><h2>今天也在记录。</h2><p className="assistant-answer">{answer}</p><form onSubmit={askAssistant}><input value={question} onChange={e => setQuestion(e.target.value)} placeholder="问问我关于你的创作" /><button>发送</button></form></div>}
     {showWorkForm && <Modal title="记录一条作品" onClose={() => setShowWorkForm(false)}><WorkForm onSave={saveWork} /></Modal>}
     {showPostForm && <Modal title="发布到社区" onClose={() => setShowPostForm(false)}><PostForm onSave={savePost} /></Modal>}
     {showProfileForm && <Modal title="编辑个人资料" onClose={() => setShowProfileForm(false)}><ProfileForm profile={state.profile} onSave={saveProfile} /></Modal>}
@@ -501,8 +515,6 @@ function Community({ userId, view, profile, posts, onAdd, onLike, onComment, onV
   if (view === 'profile') return <><section className="profile-page"><button className="profile-nav-button back-button" onClick={() => onViewChange('feed')}>返回社区</button><button className="profile-nav-button edit-profile-button" onClick={onEditProfile}>编辑资料</button><div className="profile-avatar">{profile.avatarImage ? <img src={profile.avatarImage} alt="我的头像" /> : profile.avatarLabel}</div><p className="eyebrow">个人主页</p><h1>{profile.nickname}的创作角落</h1><p className="profile-note">资料已保存在当前设备；接入账号后会同步至云端。</p>{cloudPanel}<div className="badges"><span>连续记录者</span><span>社区新朋友</span></div></section><section className="section"><p className="eyebrow">我的发帖</p>{myPosts.length ? myPosts.map(post => <article className="post mine" key={post.id}><p className="post-content">{post.content}</p><small>{formatPostTime(post.createdAt)} · {post.likes} 次喜欢</small></article>) : <p className="empty">你还没有发布内容。去社区说说正在经历的创作吧。</p>}</section></>
   return <><section className="page-head community-head"><p className="eyebrow">创作者社区</p><h1>说说你正在<br />经历的创作。</h1><div className="community-actions"><button className="profile-nav-button" onClick={() => onViewChange('profile')}>我的</button><button className="primary compact" onClick={onAdd}>发布</button></div></section><div className="post-list">{posts.map(post => { const isMine = post.userId === userId; const author = isMine ? profile.nickname : post.author; const avatar = isMine ? profile.avatarLabel : post.avatar; return <article className="post" key={post.id}><div className="post-author"><span className="avatar">{avatar}</span><div><strong>{author}</strong><small>{formatPostTime(post.createdAt)}</small></div></div><p className="post-content">{post.content}</p>{post.image && <img className="post-image" src={post.image} alt={post.imageCaption || '社区图片'} />}{!post.image && post.imageCaption && <div className="post-image">{post.imageCaption}</div>}<div className="post-actions"><button className={post.liked ? 'liked' : ''} onClick={() => onLike(post.id)}>喜欢 {post.likes}</button><button onClick={() => setReplyingTo(replyingTo === post.id ? null : post.id)}>回应 {post.comments.length}</button></div>{replyingTo === post.id && <form className="reply-form" onSubmit={event => { event.preventDefault(); onComment(post.id, draft.trim()); setDraft(''); setReplyingTo(null) }}><input value={draft} onChange={event => setDraft(event.target.value)} placeholder="写下你的回应" autoFocus /><button disabled={!draft.trim()}>发送</button></form>}{post.comments.slice(-2).map((comment, index) => <p className="comment" key={index}>{comment}</p>)}</article> })}</div></>
 }
-
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) { return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><section className="modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()}><button className="close" type="button" onClick={onClose}>关闭</button><h2>{title}</h2>{children}</section></div> }
 
 function WorkForm({ onSave }: { onSave: (event: FormEvent<HTMLFormElement>) => void | Promise<void> }) { return <form className="entry-form" onSubmit={onSave}><label>标题<input name="title" required placeholder="这条作品叫什么？" /></label><div className="two-columns"><label>平台<select name="platform" defaultValue="小红书"><option>抖音</option><option>小红书</option><option>B站</option><option>视频号</option></select></label><label>发布时间<input name="publishedAt" type="date" defaultValue={today} /></label></div><div className="two-columns"><label>观看/阅读<input name="plays" type="number" min="0" placeholder="0" /></label><label>点赞<input name="likes" type="number" min="0" placeholder="0" /></label></div><div className="two-columns"><label>评论<input name="comments" type="number" min="0" placeholder="0" /></label><label>收藏<input name="favorites" type="number" min="0" placeholder="0" /></label></div><label>分享<input name="shares" type="number" min="0" placeholder="0" /></label><label>封面印象<input name="cover" placeholder="例如：窗边、晚餐、街道" /></label><label>上传封面<input name="coverImage" type="file" accept="image/*" /></label><label>此刻的感受<select name="mood" defaultValue="平静"><option>雀跃</option><option>平静</option><option>疲惫</option><option>骄傲</option></select></label><label>作品便签<textarea name="note" placeholder="不必写得漂亮，留下当时的自己就好。" /></label><button className="primary" type="submit">保存作品</button></form> }
 

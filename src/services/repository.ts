@@ -1,6 +1,6 @@
 import type { ThemeId } from '../theme'
-import { initialProfile } from '../data'
-import type { FeedbackEvent, Post, UserProfile, Work } from '../types'
+import { defaultScoreTemplate, initialProfile } from '../data'
+import type { FeedbackEvent, Post, ScoreRecord, ScoreTemplate, Topic, UserProfile, Work, WorkReview } from '../types'
 
 export type AppState = {
   works: Work[]
@@ -8,6 +8,12 @@ export type AppState = {
   posts: Post[]
   profile: UserProfile
   theme: ThemeId
+  mode: 'life' | 'professional'
+  topics: Topic[]
+  scoreTemplates: ScoreTemplate[]
+  scoreRecords: ScoreRecord[]
+  reviews: WorkReview[]
+  badges: Record<string, string>
   /** Last write timestamp (ISO). Used by cloud sync for last-write-wins. */
   updatedAt?: string
 }
@@ -18,7 +24,19 @@ export interface AppRepository {
 }
 
 export function emptyAppState(): AppState {
-  return { works: [], feedback: [], posts: [], profile: { ...initialProfile }, theme: 'mint' }
+  return {
+    works: [],
+    feedback: [],
+    posts: [],
+    profile: { ...initialProfile },
+    theme: 'mint',
+    mode: 'life',
+    topics: [],
+    scoreTemplates: [{ ...defaultScoreTemplate, items: defaultScoreTemplate.items.map(item => ({ ...item })) }],
+    scoreRecords: [],
+    reviews: [],
+    badges: {},
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -29,6 +47,10 @@ function isPost(value: unknown): value is Post {
   return isRecord(value) && typeof value.id === 'string' && typeof value.author === 'string' && typeof value.content === 'string'
 }
 
+function isEntityWithId(value: unknown): value is { id: string } {
+  return isRecord(value) && typeof value.id === 'string'
+}
+
 export function normalizeAppState(userId: string, parsed?: Partial<AppState> | null): AppState {
   const source = isRecord(parsed) ? parsed : {}
   const profile = isRecord(source.profile)
@@ -36,11 +58,18 @@ export function normalizeAppState(userId: string, parsed?: Partial<AppState> | n
     : { ...initialProfile }
   const posts = Array.isArray(source.posts) ? source.posts.filter(isPost) : []
   const theme = source.theme === 'cream' || source.theme === 'night' ? source.theme : 'mint'
+  const scoreTemplates = Array.isArray(source.scoreTemplates) && source.scoreTemplates.length > 0
+    ? source.scoreTemplates.filter(isEntityWithId)
+    : emptyAppState().scoreTemplates
+  const badges = isRecord(source.badges)
+    ? Object.fromEntries(Object.entries(source.badges).filter(([, value]) => typeof value === 'string'))
+    : {}
   return {
     ...emptyAppState(),
     ...source,
     profile,
     theme,
+    mode: source.mode === 'professional' ? 'professional' : 'life',
     works: Array.isArray(source.works) ? source.works : [],
     feedback: Array.isArray(source.feedback) ? source.feedback : [],
     posts: posts.map(post => ({
@@ -49,6 +78,11 @@ export function normalizeAppState(userId: string, parsed?: Partial<AppState> | n
       // the old nickname is still the current nickname.
       userId: post.userId ?? (post.author === profile.nickname ? userId : undefined),
     })),
+    topics: Array.isArray(source.topics) ? source.topics.filter(isEntityWithId) : [],
+    scoreTemplates,
+    scoreRecords: Array.isArray(source.scoreRecords) ? source.scoreRecords.filter(isEntityWithId) : [],
+    reviews: Array.isArray(source.reviews) ? source.reviews.filter(isRecord) : [],
+    badges,
   }
 }
 

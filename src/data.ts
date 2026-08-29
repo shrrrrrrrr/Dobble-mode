@@ -1,6 +1,17 @@
-import type { FeedbackEvent, Post, Work } from './types'
+import type { FeedbackEvent, Post, ScoreTemplate, Work } from './types'
 
 export const initialProfile = { nickname: '我', avatarLabel: '我' }
+
+export const defaultScoreTemplate: ScoreTemplate = {
+  id: 'tpl-default',
+  name: '通用评分',
+  items: [
+    { id: 'appeal', label: '选题吸引力', weight: 30 },
+    { id: 'quality', label: '内容质量', weight: 30 },
+    { id: 'finish', label: '呈现完成度', weight: 20 },
+    { id: 'potential', label: '数据潜力', weight: 20 },
+  ],
+}
 
 export const initialWorks: Work[] = [
   { id: 'w1', title: '下雨天的老街散步', platform: '小红书', publishedAt: '2026-08-24', cover: '雨巷', plays: 12800, likes: 863, comments: 76, favorites: 149, shares: 28, note: '拍完这条，忽然觉得慢下来也挺好。', mood: '平静' },
