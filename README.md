@@ -2,7 +2,9 @@
 
 面向内容创作者的生活模式原型。记录作品、过程感受与值得记住的反馈，并整理成短期回看。
 
-当前版本：**V1.5**（社区与资料体验加固；已通过用户验收）
+当前版本：**V1.6**（本地数据访问层解耦与 UI 主题迁移；待用户验收）
+
+已将 `C:\Users\shr\Desktop\UI\theme-layout-lab` 的像素桌面设计、动态背景、主题切换和北航图库接入正式 React App。后续新增功能和按钮继续沿用当前像素桌面、非均匀分块和克制微交互风格。
 
 仓库：[github.com/shrrrrrrrr/Dobble-mode](https://github.com/shrrrrrrrr/Dobble-mode)
 
@@ -47,7 +49,12 @@ npm run verify
 
 若浏览器里仍有 V1.2 及以前的 `creator-life-v1` 数据，首次用新账号登录且该账号为空时，会提示是否导入。导入只复制到当前账号，不删除旧数据。
 
-## V1.5 首轮能力
+## V1.6 当前能力
+
+- 界面通过 `AppRepository` 访问应用数据；当前实现为保持现有行为的 `LocalAppRepository`
+- 保持本地账号、账号级数据隔离、旧版数据导入和 V1.5 社区稳定 `userId` 兼容
+- 本版本只完成数据访问层解耦，不包含 Supabase 云端同步、认证方式变更或专业模式
+
 
 - 社区帖子使用稳定 `userId` 归属，修改昵称后新旧帖子仍能正确归入「我的发帖」；旧格式帖子保持兼容读取
 - 「记录时刻」支持选择反馈类型并填写内容
@@ -68,8 +75,9 @@ npm run verify
 
 ```text
 src/
-  App.tsx                 主界面与页面
+  App.tsx                 主界面与页面状态
   services/auth.ts        本地账号注册 / 登录
+  services/repository.ts  应用数据访问接口与本地实现
   services/legacyImport.ts  V1 旧数据导入
   types.ts                数据类型
   styles.css              样式
@@ -83,5 +91,6 @@ docs/
 
 - 主分支：`master`
 - 版本标签：`v1.0.0`、`v1.3.0`、`v1.4.0`、`v1.5.0` 等，见 [docs/ROADMAP.md](docs/ROADMAP.md)
+- V1.6 已完成数据访问层改造，正在等待用户验收；验收通过后再创建 `v1.6.0` 标签
 - V1.5 已完成用户验收并发布：功能提交 `d71b363`，标签 `v1.5.0`
 - 专业模式参考仓库 [creator-topic-library](https://github.com/shrrrrrrrr/creator-topic-library)，不作为本仓库推送目标

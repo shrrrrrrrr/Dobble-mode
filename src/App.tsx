@@ -1,42 +1,10 @@
 import { FormEvent, PointerEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
-import { initialProfile } from './data'
 import type { FeedbackEvent, Platform, Post, Tab, UserProfile, Work } from './types'
 import { compressImage } from './utils/image'
 import { AppSession, getSession, registerLocalAccount, signInLocalAccount, signOut } from './services/auth'
 import { importLegacyV1Data, markLegacyDismissed, markLegacyImported, shouldOfferLegacyImport } from './services/legacyImport'
-
-type AppState = { works: Work[]; feedback: FeedbackEvent[]; posts: Post[]; profile: UserProfile }
-
-function emptyState(): AppState {
-  return { works: [], feedback: [], posts: [], profile: initialProfile }
-}
-
-function normalizeState(userId: string, parsed?: Partial<AppState> | null): AppState {
-  const profile = parsed?.profile ?? initialProfile
-  const posts = Array.isArray(parsed?.posts) ? parsed.posts : []
-  return {
-    ...emptyState(),
-    ...parsed,
-    profile,
-    works: Array.isArray(parsed?.works) ? parsed.works : [],
-    feedback: Array.isArray(parsed?.feedback) ? parsed.feedback : [],
-    posts: posts.map(post => ({
-      ...post,
-      // V1.5 adds stable ownership. Existing posts can be matched safely while
-      // the old nickname is still the current nickname.
-      userId: post.userId ?? (post.author === profile.nickname ? userId : undefined),
-    })),
-  }
-}
-
-function loadState(userId: string): AppState {
-  try {
-    const saved = localStorage.getItem(`creator-life-v2:data:${userId}`)
-    return normalizeState(userId, saved ? JSON.parse(saved) as Partial<AppState> : null)
-  } catch {
-    return emptyState()
-  }
-}
+import { emptyAppState, LocalAppRepository, normalizeAppState, type AppState } from './services/repository'
+import { seasonPacks, themePacks, type SeasonId, type ThemeId } from './theme'
 
 function storageErrorMessage(error: unknown) {
   if (error instanceof DOMException && (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
@@ -72,13 +40,30 @@ const todayLabel = (() => {
   const weekdays = ['日', '一', '二', '三', '四', '五', '六']
   return `${date.getMonth() + 1} 月 ${date.getDate()} 日，星期${weekdays[date.getDay()]}`
 })()
-const currentTime = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date())
+function formatClock(date: Date) {
+  return new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(date)
+}
+
+function formatMonth(date: Date) {
+  return `${date.getFullYear()} / ${String(date.getMonth() + 1).padStart(2, '0')}`
+}
+
+function getMonthDays(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
+}
+
+function getMonthStartOffset(date: Date) {
+  return (new Date(date.getFullYear(), date.getMonth(), 1).getDay() + 6) % 7
+}
 
 export default function App() {
-  const [state, setState] = useState<AppState>(emptyState)
+  const [state, setState] = useState<AppState>(emptyAppState)
   const [stateUserId, setStateUserId] = useState<string | null>(null)
   const [session, setSession] = useState<AppSession | null>(null)
   const [sessionReady, setSessionReady] = useState(false)
+  const [clock, setClock] = useState(() => new Date())
+  const [season, setSeason] = useState<SeasonId>('autumn')
+  const repository = useMemo(() => session ? new LocalAppRepository(session.userId) : null, [session?.userId])
   const [tab, setTab] = useState<Tab>('home')
   const [showWorkForm, setShowWorkForm] = useState(false)
   const [showPostForm, setShowPostForm] = useState(false)
@@ -103,20 +88,20 @@ export default function App() {
       setLegacyImportOpen(false)
       return
     }
-    const nextState = loadState(session.userId)
-    setState(nextState)
-    setStateUserId(session.userId)
-    setLegacyImportOpen(shouldOfferLegacyImport(session.userId, nextState))
-  }, [session])
+    setStateUserId(null)
+    if (!repository) return
+    repository.load().then(nextState => {
+      setState(nextState)
+      setStateUserId(session.userId)
+      setLegacyImportOpen(shouldOfferLegacyImport(session.userId, nextState))
+    })
+  }, [session, repository])
   useEffect(() => {
-    if (!session || stateUserId !== session.userId) return
-    try {
-      localStorage.setItem(`creator-life-v2:data:${session.userId}`, JSON.stringify(state))
-      setNotice('')
-    } catch (error) {
-      setNotice(storageErrorMessage(error))
-    }
-  }, [session, state, stateUserId])
+    if (!session || !repository || stateUserId !== session.userId) return
+    repository.save(state).then(() => setNotice('')).catch(error => setNotice(storageErrorMessage(error)))
+  }, [repository, session, state, stateUserId])
+  useEffect(() => { document.body.dataset.theme = state.theme }, [state.theme])
+  useEffect(() => { const timer = window.setInterval(() => setClock(new Date()), 1000); return () => window.clearInterval(timer) }, [])
   useEffect(() => { getSession().then(savedSession => { setSession(savedSession); setSessionReady(true) }) }, [])
 
   const memories = useMemo(() => {
@@ -135,6 +120,12 @@ export default function App() {
   const recentWindow = getRecentSevenDays()
   const recentWorks = state.works.filter(work => isInRecentSevenDays(work.publishedAt, recentWindow))
   const recentFeedback = state.feedback.filter(item => isInRecentSevenDays(item.createdAt, recentWindow))
+  const theme = state.theme
+
+  function changeTheme(nextTheme: ThemeId) {
+    const pack = themePacks.find(item => item.id === nextTheme)
+    if (pack?.available) setState(current => ({ ...current, theme: nextTheme }))
+  }
 
   async function saveWork(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -261,7 +252,7 @@ export default function App() {
       setLegacyImportOpen(false)
       return
     }
-    setState(normalizeState(session.userId, legacy))
+    setState(normalizeAppState(session.userId, legacy))
     markLegacyImported(session.userId)
     setLegacyImportOpen(false)
   }
@@ -278,12 +269,13 @@ export default function App() {
   if (!session) return <LocalAuthPage onAuthenticated={setSession} />
 
   return <main className="app-shell">
+    <PixelBackground theme={theme} season={season} />
     <section className="mobile-frame" ref={frameRef}>
-      <header className="topbar"><span className="brand">留白</span><span className="mode-pill">生活模式</span><div className="account-summary"><span>{session.username}</span><button onClick={handleSignOut}>退出</button></div></header>
-      <div className="content">
+      <header className="topbar"><button className="brand tile-interactive" onClick={() => { setTab('home'); setCommunityView('feed'); setAssistantOpen(false) }} aria-label="留白，返回首页">留白</button><span className="mode-pill">生活模式</span><div className="theme-switcher" aria-label="主题选择"><button className={`theme-dot ${theme === 'mint' ? 'active' : ''}`} onClick={() => { changeTheme('mint'); setAssistantOpen(false) }} title="默认主题" aria-label="默认主题" /><button className={`theme-dot cream ${theme === 'cream' ? 'active' : ''}`} onClick={() => { changeTheme('cream'); setAssistantOpen(false) }} title="北航四季" aria-label="北航四季" /><button className="theme-dot night" disabled title="主题二尚未设计" aria-label="主题二尚未设计" /></div>{theme === 'cream' && <div className="season-switcher" aria-label="北航四季选择">{seasonPacks.map(pack => <button key={pack.id} className={season === pack.id ? 'active' : ''} onClick={() => { setSeason(pack.id); setAssistantOpen(false) }} style={{ '--season-accent': pack.accent } as React.CSSProperties}>{pack.name.split(' · ')[0]}</button>)}</div>}<div className="account-summary"><span>{session.username}</span><button onClick={() => { handleSignOut(); setAssistantOpen(false) }}>退出</button></div></header>
+      <div className="content" onClick={() => assistantOpen && setAssistantOpen(false)}>
         {notice && <div className="app-notice" role="alert"><span>{notice}</span><button onClick={() => setNotice('')} aria-label="关闭提示">关闭</button></div>}
         {selectedRecap ? <WeeklyRecap works={recentWorks} feedback={recentFeedback} onClose={() => setSelectedRecap(false)} /> : selectedWork ? <WorkDetail work={selectedWork} feedback={state.feedback.filter((item: FeedbackEvent) => item.workId === selectedWork.id)} onClose={() => setSelectedWork(null)} onSaveNote={updateNote} onFeedback={() => setFeedbackWorkId(selectedWork.id)} /> : <>
-          {tab === 'home' && <Home profile={state.profile} works={recentWorks} feedback={recentFeedback} dateLabel={todayLabel} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} onNavigate={nextTab => { setTab(nextTab); if (nextTab === 'community') setCommunityView('feed') }} onOpenProfile={() => { setTab('community'); setCommunityView('profile') }} />}
+          {tab === 'home' && <Home profile={state.profile} works={recentWorks} feedback={recentFeedback} dateLabel={todayLabel} clockText={formatClock(clock)} monthLabel={formatMonth(clock)} todayNumber={clock.getDate()} monthDays={getMonthDays(clock)} monthStartOffset={getMonthStartOffset(clock)} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} onNavigate={nextTab => { setTab(nextTab); if (nextTab === 'community') setCommunityView('feed') }} onOpenProfile={() => { setTab('community'); setCommunityView('profile') }} />}
           {tab === 'works' && <Works works={state.works} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} />}
           {tab === 'memories' && <Memories memories={memories} works={recentWorks} onOpenRecap={() => setSelectedRecap(true)} />}
           {tab === 'community' && <Community userId={session.userId} view={communityView} profile={state.profile} posts={state.posts} onAdd={() => setShowPostForm(true)} onLike={toggleLike} onComment={addComment} onViewChange={setCommunityView} onEditProfile={() => setShowProfileForm(true)} />}
@@ -299,6 +291,13 @@ export default function App() {
     {feedbackWorkId && <Modal title="记录一个珍藏时刻" onClose={() => setFeedbackWorkId(null)}><FeedbackForm onSave={saveFeedback} /></Modal>}
     {legacyImportOpen && <Modal title="发现旧版数据" onClose={dismissLegacyImport}><div className="legacy-import"><p>检测到这台设备上还有 V1.2 及以前的创作记录。要导入到当前账号吗？</p><p className="legacy-import-note">导入只会复制到当前账号，不会删除旧数据。如果跳过，之后不会再提示。</p><div className="legacy-import-actions"><button className="primary" onClick={acceptLegacyImport}>导入到当前账号</button><button className="text-action" onClick={dismissLegacyImport}>暂不导入</button></div></div></Modal>}
   </main>
+}
+
+function PixelBackground({ theme, season }: { theme: ThemeId; season: SeasonId }) {
+  if (theme === 'cream') return <div className={`season-background season-${season}`} style={{ backgroundImage: `url(${seasonPacks.find(item => item.id === season)?.image})` }} aria-hidden="true"><span className="season-pixels" /><span className="snow-layer" /></div>
+  const pack = themePacks.find(item => item.id === theme && item.available) ?? themePacks[0]
+  if (!pack.backgroundVideo) return null
+  return <video className="pixel-video-bg visible" autoPlay muted loop playsInline aria-hidden="true" poster={pack.poster} ref={video => { if (video) video.playbackRate = 0.55 }}><source src={pack.backgroundVideo} type="video/webm" /></video>
 }
 
 function LocalAuthPage({ onAuthenticated }: { onAuthenticated: (session: AppSession) => void }) {
@@ -323,7 +322,7 @@ function LocalAuthPage({ onAuthenticated }: { onAuthenticated: (session: AppSess
   return <main className="auth-shell"><section className="auth-card"><div className="auth-sticker">留</div><p className="eyebrow">创作生活</p><h1>{registering ? <>创建你的<br />创作桌面。</> : <>先把你自己<br />带进来。</>}</h1><p className="auth-copy">账号仅保存在当前设备。作品、回忆和社区记录会按账号分别保存。</p><form className="auth-form" onSubmit={submit}><label>账号<input value={username} onChange={event => setUsername(event.target.value)} placeholder="3–20 位字母、数字、下划线或短横线" maxLength={20} required autoFocus /></label><label>密码<input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="至少 6 位" minLength={6} required /></label><button className="primary" disabled={loading}>{loading ? '处理中...' : registering ? '创建并进入' : '进入创作桌面'}</button></form><button className="text-action auth-switch" onClick={() => { setRegistering(value => !value); setMessage('') }}>{registering ? '已有账号？直接登录' : '第一次来？创建本地账号'}</button><p className="auth-message">{message}</p><p className="auth-preview">当前为本地账号体验，不连接云端。若设备上有旧版数据，登录后可选择导入。</p></section></main>
 }
 
-function Home({ profile, works, feedback, dateLabel, onAdd, onOpenWork, onNavigate, onOpenProfile }: { profile: UserProfile; works: Work[]; feedback: FeedbackEvent[]; dateLabel: string; onAdd: () => void; onOpenWork: (work: Work) => void; onNavigate: (tab: Tab) => void; onOpenProfile: () => void }) {
+function Home({ profile, works, feedback, dateLabel, clockText, monthLabel, todayNumber, monthDays, monthStartOffset, onAdd, onOpenWork, onNavigate, onOpenProfile }: { profile: UserProfile; works: Work[]; feedback: FeedbackEvent[]; dateLabel: string; clockText: string; monthLabel: string; todayNumber: number; monthDays: number; monthStartOffset: number; onAdd: () => void; onOpenWork: (work: Work) => void; onNavigate: (tab: Tab) => void; onOpenProfile: () => void }) {
   const totalLikes = works.reduce((sum, work) => sum + work.likes, 0)
   const latest = works[0]
   return <div className="studio-layout">
@@ -343,8 +342,8 @@ function Home({ profile, works, feedback, dateLabel, onAdd, onOpenWork, onNaviga
       <section className="moments-board"><p className="eyebrow">最近七天值得记住</p>{feedback.length ? feedback.slice(0, 2).map(item => <article className="moment tile-interactive" key={item.id}><span>{item.type}</span><p>{item.content}</p></article>) : <p className="empty">这七天还没有收藏的时刻。记录一条作品，或给自己留句话。</p>}</section>
     </section>
     <aside className="dashboard-rail">
-      <article className="clock-widget tile-interactive"><span>创作时间</span><strong>20:26</strong><small>留给自己的十分钟</small></article>
-      <article className="calendar-widget tile-interactive"><p>2026 / 08</p><div className="week-row"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div><div className="date-grid">{Array.from({ length: 31 }, (_, index) => <span className={index === 26 ? 'today' : ''} key={index}>{index + 1}</span>)}</div></article>
+      <article className="clock-widget tile-interactive" aria-label={`像素时钟 ${clockText}`}><span>创作时间</span><strong data-clock={clockText} /><small>留给自己的十分钟</small></article>
+      <article className="calendar-widget tile-interactive" data-today={todayNumber}><p>{monthLabel}</p><div className="week-row" aria-hidden="true"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div><div className="date-grid" aria-hidden="true">{Array.from({ length: monthStartOffset + monthDays }, (_, index) => { const day = index - monthStartOffset + 1; return day > 0 ? <span className={day === todayNumber ? 'today' : ''} key={day}>{day}</span> : <span key={`empty-${index}`} /> })}</div></article>
       <article className="metric-widget tile-interactive"><p>最近七天</p><div><strong>{works.length}</strong><span>条作品</span></div><div><strong>{number(totalLikes)}</strong><span>个喜欢</span></div><div><strong>{feedback.length}</strong><span>次收藏</span></div></article>
     </aside>
   </div>
