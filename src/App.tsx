@@ -442,7 +442,10 @@ function PixelatedImageBackground({ source, pixelSize, className }: { source: st
       canvas.width = width
       canvas.height = height
       context.imageSmoothingEnabled = false
-      const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight)
+      const portrait = window.innerHeight > window.innerWidth
+      const scale = portrait
+        ? Math.min(width / image.naturalWidth, height / image.naturalHeight)
+        : Math.max(width / image.naturalWidth, height / image.naturalHeight)
       const drawWidth = image.naturalWidth * scale
       const drawHeight = image.naturalHeight * scale
       context.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight)
@@ -483,7 +486,10 @@ function PixelatedVideoBackground({ source, poster, className }: { source: strin
       if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height }
       if (context && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth) {
         context.imageSmoothingEnabled = false
-        const scale = Math.max(width / video.videoWidth, height / video.videoHeight)
+        const portrait = window.innerHeight > window.innerWidth
+        const scale = portrait
+          ? Math.min(width / video.videoWidth, height / video.videoHeight)
+          : Math.max(width / video.videoWidth, height / video.videoHeight)
         const drawWidth = video.videoWidth * scale
         const drawHeight = video.videoHeight * scale
         context.drawImage(video, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight)

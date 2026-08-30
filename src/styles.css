@@ -340,3 +340,91 @@ body,button,input,textarea,select,label,p,small,strong,span,h1,h2,h3 { font-weig
 .professional .score-copy { display:grid; align-content:center; gap:7px; }
 .professional .score-total { min-width:48px; text-align:center; font-size:20px; }
 .professional .bar-row,.professional .top-row { padding:9px; background:rgba(255,255,255,.64); border:2px solid rgba(255,255,255,.84); box-shadow:3px 3px 0 rgba(23,59,88,.1); }
+
+/* V3.5: responsive layout contracts. Components shrink, wrap, then stack instead of colliding. */
+html,body,#root { min-width:0; }
+.app-shell,.mobile-frame,.content,.studio-layout,.studio-stage,.creator-aside,.dashboard-rail,.professional,.pro-board { min-width:0; }
+.mobile-frame { width:min(1120px,100%); padding-bottom:118px; overflow:visible; }
+.topbar { height:auto; min-height:74px; flex-wrap:wrap; align-items:center; }
+.topbar > * { min-width:0; }
+.theme-switcher,.season-switcher,.account-summary { flex:0 1 auto; }
+.account-summary { flex-wrap:wrap; justify-content:flex-end; }
+.studio-layout { grid-template-columns:minmax(170px,.76fr) minmax(0,1.36fr) minmax(190px,.88fr); }
+.dashboard-rail { min-width:0; }
+.moments-board,.metric-grid,.badge-wall { min-width:0; }
+.work-card,.work-copy,.work-metrics,.topic-head,.review-title,.bar-row,.top-row { min-width:0; }
+.work-copy h3,.work-copy p,.post-content,.topic-card h3,.review-title strong,.top-row strong { overflow-wrap:anywhere; }
+.content { padding-bottom:40px; }
+
+@media (max-width:980px) {
+  .app-shell { padding:14px; }
+  .studio-layout { grid-template-columns:minmax(175px,.8fr) minmax(0,1.2fr); gap:14px; }
+  .dashboard-rail { grid-column:1/-1; grid-template-columns:repeat(3,minmax(0,1fr)); align-items:stretch; }
+  .dashboard-rail > * { min-width:0; }
+  .calendar-widget img { max-height:145px; }
+  .topbar { gap:8px; }
+  .account-summary { margin-left:auto; }
+}
+
+@media (max-width:700px) {
+  .app-shell { padding:0; }
+  .mobile-frame { width:100%; min-height:100dvh; padding-bottom:118px; }
+  .topbar { padding:12px 14px; align-items:center; }
+  .brand { order:1; }
+  .account-summary { order:2; margin-left:auto; }
+  .mode-switch { order:3; }
+  .theme-switcher { order:4; margin-left:0; }
+  .season-switcher { order:5; }
+  .studio-layout { grid-template-columns:minmax(0,1fr); padding:16px 0 0; }
+  .creator-aside { min-height:0; grid-template-columns:auto minmax(0,1fr); gap:12px; }
+  .creator-aside .studio-nav,.creator-aside .aside-note { grid-column:1/-1; }
+  .dashboard-rail { grid-column:auto; grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .clock-widget,.calendar-widget,.metric-widget { padding:12px; }
+  .clock-widget strong { font-size:28px; }
+  .calendar-widget img { max-height:125px; }
+  .studio-hero { min-height:220px; }
+  .studio-hero h1,h1 { font-size:32px; }
+  .moments-board { grid-template-columns:minmax(0,1fr); }
+  .moments-board > .eyebrow { grid-column:auto; }
+  .metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .template-list { grid-template-columns:minmax(0,1fr); }
+  .detail-metrics { grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; }
+  .detail-metrics span { min-width:0; }
+  .weekly-recap { min-height:calc(100dvh - 150px); padding:18px 0 24px; }
+  .recap-slide { min-height:420px; padding:28px 22px; }
+  .recap-slide h1 { font-size:32px; }
+  .recap-number { font-size:52px; }
+  .recap-quote { font-size:23px; }
+}
+
+@media (max-width:480px) {
+  .topbar { gap:7px; }
+  .mode-switch { flex:1 0 100%; width:100%; justify-content:center; }
+  .theme-switcher,.season-switcher { max-width:100%; overflow-x:auto; }
+  .season-switcher { display:flex; }
+  .account-summary { gap:6px; }
+  .account-profile span { max-width:78px; }
+  .content { padding-inline:13px; }
+  .creator-aside { grid-template-columns:minmax(0,1fr); }
+  .creator-aside .studio-nav { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .side-link { min-width:0; padding:9px 5px; justify-content:center; font-size:11px; }
+  .dashboard-rail { grid-template-columns:minmax(0,1fr); }
+  .calendar-widget img { max-height:170px; }
+  .work-card { grid-template-columns:82px minmax(0,1fr); gap:10px; }
+  .cover { height:100px; padding:8px; font-size:16px; }
+  .work-metrics { flex-wrap:wrap; gap:5px 8px; }
+  .two-columns { grid-template-columns:minmax(0,1fr); }
+  .community-actions { position:static; margin-top:16px; flex-wrap:wrap; }
+  .profile-page { padding-top:76px; }
+  .profile-page .back-button,.profile-page .edit-profile-button { top:16px; }
+  .profile-page .back-button { left:14px; }.profile-page .edit-profile-button { right:14px; }
+  .bottom-nav { width:calc(100% - 16px); left:8px; bottom:8px; height:68px; }
+  .bottom-nav button { min-width:0; font-size:11px; }
+  .nav-mark { width:22px; height:22px; }
+  .companion { right:2px; bottom:76px; }
+  body[data-theme='night'] .companion { right:-8px; bottom:62px; }
+  .assistant-panel { width:calc(100vw - 26px); right:13px; bottom:168px; }
+  .pro-filter-row { width:100%; }
+  .board-toolbar,.toolbar-actions,.topic-actions { flex-wrap:wrap; }
+  .professional .page-head h1 { font-size:27px; }
+}
