@@ -1812,3 +1812,16 @@ M src/App.tsx
 M src/App.tsx
  M src/styles.css
 ```
+
+
+### 工作日志 2026年8月30日 19:53
+
+- 记录：V3.7.2 默认主题视频黑边裁切：保留原始 pixel-original.mp4 不变，新增保留原音轨的 pixel-original-clean.mp4；按源视频有效画面裁切为 2240x1328，去除原画面周围黑边，不改变亮度、对比度、速度或时长。默认主题现引用无黑边副本，手机静态海报也已从该副本重生成。已通过 npm run build、npm run verify（42/42）和 git diff --check。
+- 记录时 HEAD：`f286c75`
+- 工作区状态：
+
+```text
+M public/assets/pixel-original-poster.jpg
+ M src/theme.ts
+?? public/assets/pixel-original-clean.mp4
+```
