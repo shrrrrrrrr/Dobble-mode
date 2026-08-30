@@ -45,6 +45,11 @@ function source(path) {
   return readFileSync(join(root, ...path), 'utf8')
 }
 
+function isGitIgnored(root, file) {
+  const check = spawnSync('git', ['-C', root, 'check-ignore', '-q', file])
+  return check.status === 0
+}
+
 console.log('Account rules (V1.3+)')
 if (/^[a-z0-9_-]{3,20}$/.test(normalizeUsername('Creator_01'))) ok('username normalization and validation')
 else fail('username normalization and validation')
@@ -154,8 +159,8 @@ if (existsSync(join(root, '.github', 'workflows', 'build.yml'))) ok('CI build wo
 else fail('CI build workflow exists')
 if (existsSync(join(root, 'docs', 'DEPLOYMENT.md'))) ok('deployment guide exists')
 else fail('deployment guide exists')
-if (!existsSync(join(root, '.env.local'))) ok('no .env.local committed in workspace')
-else fail('no .env.local committed in workspace')
+if (!existsSync(join(root, '.env.local')) || isGitIgnored(root, '.env.local')) ok('.env.local absent or properly git-ignored')
+else fail('.env.local exists but is NOT git-ignored', 'secrets could be committed')
 
 console.log('\nBuild')
 const build = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'build'], {
