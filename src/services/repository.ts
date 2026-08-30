@@ -62,6 +62,9 @@ function isEntityWithId(value: unknown): value is { id: string } {
 }
 
 export function normalizeAppState(userId: string, parsed?: Partial<AppState> | null): AppState {
+  // 每次标准化只创建一份默认快照，所有缺失字段都从同一份回退状态读取，
+  // 避免创建多份内容等价的默认对象。
+  const defaults = emptyAppState()
   const source = isRecord(parsed) ? parsed : {}
   const profile = isRecord(source.profile)
     ? { ...initialProfile, ...source.profile }
@@ -76,12 +79,12 @@ export function normalizeAppState(userId: string, parsed?: Partial<AppState> | n
   }
   const scoreTemplates = Array.isArray(source.scoreTemplates) && source.scoreTemplates.length > 0
     ? source.scoreTemplates.filter(isEntityWithId)
-    : emptyAppState().scoreTemplates
+    : defaults.scoreTemplates
   const badges = isRecord(source.badges)
     ? Object.fromEntries(Object.entries(source.badges).filter(([, value]) => typeof value === 'string'))
     : {}
   return {
-    ...emptyAppState(),
+    ...defaults,
     ...source,
     profile,
     theme,

@@ -1913,3 +1913,15 @@ M README.md
 ```text
 ?? docs/BEIHANG_SEASONS_UI_SPEC.md
 ```
+
+
+### 工作日志 2026年8月31日 01:34
+
+- 记录：全局保守代码优化：完成主应用、云同步、本地仓储、认证、迁移、徽章与回忆媒体的巡检，基线和修改后 npm run verify 均为 55/55。仅修改两处可证明等价的重复实现：src/services/cloud.ts 抽取 Supabase user 到 AppSession 的统一转换，确保启动会话恢复与实时 auth state 回调使用同一身份映射；getCloudAccount 复用该读取链路。src/services/repository.ts 的 normalizeAppState 每次只创建一份默认快照，避免为评分模板回退和最终状态重复分配等价对象。两处均添加中文注释；未改业务规则、数据模型、UI、API、Supabase 表结构或 Android 原生工程。git diff --check 通过。
+- 记录时 HEAD：`84bdf43`
+- 工作区状态：
+
+```text
+M src/services/cloud.ts
+ M src/services/repository.ts
+```

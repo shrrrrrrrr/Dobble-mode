@@ -21,11 +21,23 @@ export interface CloudSnapshot {
 
 export type CloudResult<T> = { ok: true; data: T } | { ok: false; error: string }
 
+type AuthUser = { id: string; email?: string | null }
+
+// 会话恢复和登录状态事件必须生成同一份本地身份，集中转换可避免
+// 后续字段调整后，启动恢复与实时登录状态出现不一致。
+function toAppSession(user?: AuthUser | null): AppSession | null {
+  if (!user?.email) return null
+  return {
+    userId: user.id,
+    username: user.email.split('@')[0] || user.email,
+    email: user.email,
+    provider: 'supabase',
+  }
+}
+
 export async function getCloudAccount(): Promise<CloudAccount | null> {
-  if (!supabase) return null
-  const { data, error } = await supabase.auth.getSession()
-  if (error || !data.session?.user?.email) return null
-  return { email: data.session.user.email }
+  const session = await getPrimarySession()
+  return session?.email ? { email: session.email } : null
 }
 
 export async function cloudSignUp(email: string, password: string): Promise<CloudResult<CloudAccount>> {
@@ -76,16 +88,13 @@ export async function pushCloudState(state: unknown): Promise<CloudResult<string
 export async function getPrimarySession(): Promise<AppSession | null> {
   if (!supabase) return null
   const { data, error } = await supabase.auth.getSession()
-  const user = error ? null : data.session?.user
-  if (!user?.email) return null
-  return { userId: user.id, username: user.email.split('@')[0] || user.email, email: user.email, provider: 'supabase' }
+  return error ? null : toAppSession(data.session?.user)
 }
 
 export function onPrimaryAuthStateChange(callback: (session: AppSession | null) => void) {
   if (!supabase) return { unsubscribe: () => undefined }
   const { data } = supabase.auth.onAuthStateChange((_event, next) => {
-    const user = next?.user
-    callback(user?.email ? { userId: user.id, username: user.email.split('@')[0] || user.email, email: user.email, provider: 'supabase' } : null)
+    callback(toAppSession(next?.user))
   })
   return data.subscription
 }
