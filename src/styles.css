@@ -226,7 +226,7 @@ h1,h2,h3,.brand,.companion span,.post-content,.work-copy { font-family:'Ma Shan 
 .app-shell::before { content:none; }
 .season-pixels { display:none; }
 .pixel-canvas-bg { position:fixed; inset:0; z-index:-2; width:100vw; height:100vh; display:block; pointer-events:none; image-rendering:pixelated; image-rendering:crisp-edges; filter:saturate(1.07) contrast(1.04) brightness(1.04); }
-.pixel-video-source { position:fixed; inset:0; z-index:-4; width:100vw; height:100dvh; object-fit:cover; opacity:.001; pointer-events:none; }
+.pixel-video-source { position:fixed; width:1px; height:1px; opacity:0; pointer-events:none; left:-10px; top:-10px; }
 .season-background,.sakura-background { background:none; animation:none; }
 .season-background::before,.season-background::after,.sakura-background::after { content:none; }
 

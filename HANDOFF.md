@@ -1800,3 +1800,15 @@ M src/App.tsx
  M src/theme.ts
 ?? public/assets/pixel-original-poster.jpg
 ```
+
+
+### 工作日志 2026年8月30日 19:40
+
+- 记录：V3.7.1 Android 默认主题背景修复：确认部分手机浏览器会把用于 Canvas 取帧的隐藏 MP4 当成独立原生播放器，出现播放器控制条及上下黑边。触屏设备现改为使用同一原视频提取的像素海报背景，保留红色单车构图并杜绝独立视频播放；桌面端动态视频背景不变。已通过 npm run build、npm run verify（42/42）和 git diff --check。
+- 记录时 HEAD：`a5eb066`
+- 工作区状态：
+
+```text
+M src/App.tsx
+ M src/styles.css
+```

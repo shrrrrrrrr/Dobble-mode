@@ -459,6 +459,8 @@ function PixelatedImageBackground({ source, pixelSize, className, focalPoint }: 
 }
 
 function PixelatedVideoBackground({ source, poster, className, focalPoint }: { source: string; poster?: string; className: string; focalPoint: { x: number; y: number } }) {
+  const useStaticMobileBackground = typeof window !== 'undefined' && window.matchMedia('(hover:none) and (pointer:coarse)').matches
+  if (useStaticMobileBackground && poster) return <PixelatedImageBackground source={poster} pixelSize={5} className={className} focalPoint={focalPoint} />
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
 
