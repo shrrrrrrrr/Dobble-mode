@@ -327,3 +327,16 @@ body,button,input,textarea,select,label,p,small,strong,span,h1,h2,h3 { font-weig
 .professional .text-action:hover { transform:translateY(-2px); box-shadow:5px 5px 0 rgba(23,59,88,.18); filter:saturate(1.08); }
 @media (prefers-reduced-motion:reduce) { .pixel-canvas-bg.theme-background-layer,.pixel-canvas-bg.video-layer { animation:none; transition:none; } }
 @media (max-width:560px) { .pro-filter-row { gap:6px; }.pro-filter-button { min-height:32px; padding:6px 8px; font-size:11px; }.professional .page-head h1 { font-size:28px; } }
+
+/* V3.4.1: every professional metric and scoring label keeps a readable pixel surface. */
+.professional .metric-tile,.professional .template-card,.professional .score-record,.professional .chart-card { background:rgba(255,255,255,.8); border:2px solid rgba(255,255,255,.9); box-shadow:4px 4px 0 rgba(23,59,88,.15); }
+.professional .metric-tile { gap:6px; padding:11px; }
+.professional .metric-tile strong,.professional .metric-tile span,.professional .template-card h3,.professional .template-card li,.professional .score-copy strong,.professional .score-total,.professional .bar-label,.professional .top-rank,.professional .top-row > strong { display:table; width:fit-content; max-width:100%; padding:4px 7px; color:var(--ink); background:rgba(255,255,255,.9); border:2px solid rgba(255,255,255,.94); box-shadow:2px 2px 0 rgba(23,59,88,.1); }
+.professional .metric-tile strong { font-size:22px; line-height:1; }
+.professional .metric-tile span { font-size:12px; }
+.professional .template-card ul { margin:10px 0; padding:9px; background:rgba(255,255,255,.68); border:2px solid rgba(255,255,255,.86); }
+.professional .template-card li { margin:5px 0; }
+.professional .template-card li span,.professional .template-card li b { font-weight:800; }
+.professional .score-copy { display:grid; align-content:center; gap:7px; }
+.professional .score-total { min-width:48px; text-align:center; font-size:20px; }
+.professional .bar-row,.professional .top-row { padding:9px; background:rgba(255,255,255,.64); border:2px solid rgba(255,255,255,.84); box-shadow:3px 3px 0 rgba(23,59,88,.1); }

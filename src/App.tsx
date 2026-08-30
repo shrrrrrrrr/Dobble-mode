@@ -456,79 +456,58 @@ function PixelatedImageBackground({ source, pixelSize, className }: { source: st
 }
 
 function PixelatedVideoBackground({ source, poster, className }: { source: string; poster?: string; className: string }) {
-  const canvasRefs = [useRef<HTMLCanvasElement | null>(null), useRef<HTMLCanvasElement | null>(null)]
-  const videoRefs = [useRef<HTMLVideoElement | null>(null), useRef<HTMLVideoElement | null>(null)]
-  const [activeLayer, setActiveLayer] = useState(0)
-  const [crossfading, setCrossfading] = useState(false)
-  const activeLayerRef = useRef(0)
-  const crossfadingRef = useRef(false)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
 
   useEffect(() => {
-    const canvases = canvasRefs.map(ref => ref.current)
-    const videos = videoRefs.map(ref => ref.current)
-    if (canvases.some(canvas => !canvas) || videos.some(video => !video)) return
+    const canvas = canvasRef.current
+    const video = videoRef.current
+    if (!canvas || !video) return
     let frame = 0
-    let disposed = false
-
-    const play = (video: HTMLVideoElement) => video.play().catch(() => undefined)
-    const beginCrossfade = () => {
-      if (crossfadingRef.current || disposed) return
-      const currentLayer = activeLayerRef.current
-      const incomingLayer = currentLayer === 0 ? 1 : 0
-      const incoming = videos[incomingLayer]!
-      incoming.currentTime = 0
-      play(incoming)
-      crossfadingRef.current = true
-      setCrossfading(true)
-    }
-    const completeCrossfade = () => {
-      const outgoingLayer = activeLayerRef.current
-      const incomingLayer = outgoingLayer === 0 ? 1 : 0
-      const outgoing = videos[outgoingLayer]!
-      outgoing.pause()
-      outgoing.currentTime = 0
-      activeLayerRef.current = incomingLayer
-      crossfadingRef.current = false
-      setActiveLayer(incomingLayer)
-      setCrossfading(false)
+    const firstFrame = document.createElement('canvas')
+    let capturedFirstFrame = false
+    const captureFirstFrame = () => {
+      if (!video.videoWidth || !video.videoHeight) return
+      firstFrame.width = video.videoWidth
+      firstFrame.height = video.videoHeight
+      const firstContext = firstFrame.getContext('2d')
+      if (!firstContext) return
+      firstContext.imageSmoothingEnabled = false
+      firstContext.drawImage(video, 0, 0)
+      capturedFirstFrame = true
     }
     const draw = () => {
       const width = Math.max(1, Math.ceil(window.innerWidth / 5))
       const height = Math.max(1, Math.ceil(window.innerHeight / 5))
-      canvases.forEach((canvas, index) => {
-        const video = videos[index]!
-        const context = canvas!.getContext('2d')
-        if (canvas!.width !== width || canvas!.height !== height) { canvas!.width = width; canvas!.height = height }
-        if (!context || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth) return
+      const context = canvas.getContext('2d')
+      if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height }
+      if (context && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth) {
         context.imageSmoothingEnabled = false
         const scale = Math.max(width / video.videoWidth, height / video.videoHeight)
         const drawWidth = video.videoWidth * scale
         const drawHeight = video.videoHeight * scale
         context.drawImage(video, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight)
-      })
-      const activeVideo = videos[activeLayerRef.current]!
-      if (!crossfadingRef.current && Number.isFinite(activeVideo.duration) && activeVideo.duration > 1 && activeVideo.currentTime >= activeVideo.duration - 0.9) beginCrossfade()
+        const seamDuration = 0.28
+        const remaining = video.duration - video.currentTime
+        if (capturedFirstFrame && Number.isFinite(remaining) && remaining > 0 && remaining < seamDuration) {
+          context.globalAlpha = 1 - remaining / seamDuration
+          context.drawImage(firstFrame, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight)
+          context.globalAlpha = 1
+        }
+      }
       frame = window.requestAnimationFrame(draw)
     }
-    const first = videos[0]!
-    const onReady = () => play(first)
-    const onEnded = (event: Event) => {
-      const endedVideo = event.currentTarget as HTMLVideoElement
-      if (crossfadingRef.current) completeCrossfade()
-      else { endedVideo.currentTime = 0; play(endedVideo) }
-    }
-    first.addEventListener('loadeddata', onReady, { once: true })
-    videos.forEach(video => video!.addEventListener('ended', onEnded))
-    play(first)
+    video.addEventListener('loadeddata', captureFirstFrame, { once: true })
+    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) captureFirstFrame()
+    video.play().catch(() => undefined)
     draw()
     return () => {
-      disposed = true
       window.cancelAnimationFrame(frame)
-      first.removeEventListener('loadeddata', onReady)
-      videos.forEach(video => video!.removeEventListener('ended', onEnded))
+      video.removeEventListener('loadeddata', captureFirstFrame)
     }
   }, [source])
-  return <>{[0, 1].map(index => <canvas key={index} ref={canvasRefs[index]} className={`pixel-canvas-bg pixel-video-bg ${className} video-layer ${activeLayer === index ? (crossfading ? 'leaving' : 'resting') : (crossfading ? 'entering' : 'hidden')}`} aria-hidden="true" />)}{[0, 1].map(index => <video key={index} ref={videoRefs[index]} className="pixel-video-source" muted playsInline preload="auto" poster={poster}><source src={source} type="video/webm" /></video>)}</>
+  const mediaType = source.endsWith('.mp4') ? 'video/mp4' : 'video/webm'
+  return <><canvas ref={canvasRef} className={`pixel-canvas-bg pixel-video-bg ${className}`} aria-hidden="true" /><video ref={videoRef} className="pixel-video-source" autoPlay muted loop playsInline preload="auto" poster={poster}><source src={source} type={mediaType} /></video></>
 }
 
 function LocalAuthPage({ onAuthenticated }: { onAuthenticated: (session: AppSession) => void }) {
