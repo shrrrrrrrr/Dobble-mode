@@ -185,6 +185,26 @@ else fail('deployment guide exists')
 if (!existsSync(join(root, '.env.local')) || isGitIgnored(root, '.env.local')) ok('.env.local absent or properly git-ignored')
 else fail('.env.local exists but is NOT git-ignored', 'secrets could be committed')
 
+console.log('\nAndroid shell (V3.9)')
+if (existsSync(join(root, 'capacitor.config.ts'))) ok('Capacitor configuration exists')
+else fail('Capacitor configuration exists')
+const capacitorConfig = source(['capacitor.config.ts'])
+if (capacitorConfig.includes("appId: 'com.dobblemode.app'") && capacitorConfig.includes("webDir: 'dist'")) {
+  ok('Capacitor app identity and web output are configured')
+} else {
+  fail('Capacitor app identity and web output are configured')
+}
+if (existsSync(join(root, 'android', 'app', 'build.gradle')) && existsSync(join(root, 'android', 'gradlew.bat'))) {
+  ok('Android native project and Gradle wrapper exist')
+} else {
+  fail('Android native project and Gradle wrapper exist')
+}
+const packageSource = source(['package.json'])
+if (packageSource.includes('"android:sync"') && packageSource.includes('"android:apk"')) ok('Android sync and APK scripts exist')
+else fail('Android sync and APK scripts exist')
+if (existsSync(join(root, 'docs', 'ANDROID_BUILD.md'))) ok('Android build guide exists')
+else fail('Android build guide exists')
+
 console.log('\nBuild')
 const build = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'build'], {
   cwd: root,

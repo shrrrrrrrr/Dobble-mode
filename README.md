@@ -28,6 +28,16 @@ npm run preview
 npm run verify
 ```
 
+## Android 安装包
+
+项目已接入 Capacitor 原生 Android 壳，应用 ID 为 `com.dobblemode.app`，显示名称为「留白」。首次可安装调试包由以下命令生成：
+
+```bash
+npm run android:apk
+```
+
+生成位置为 `android/app/build/outputs/apk/debug/app-debug.apk`。这是一份可直接安装到 Android 真机的调试包；不需要 AVD。完整的本机配置、安装步骤和正式发布流程见 [docs/ANDROID_BUILD.md](docs/ANDROID_BUILD.md)。
+
 ## 模式切换
 
 顶栏「生活 / 专业」分段开关切换两种模式，模式偏好随当前账号保存：
@@ -101,6 +111,8 @@ src/
 supabase/migrations/           云端表结构与 RLS
 scripts/verify-final.mjs       验收脚本
 docs/                          ROADMAP / HANDOFF / 部署 / Supabase 文档
+android/                       Capacitor 生成的 Android 原生工程
+capacitor.config.ts            Android 壳的应用标识与构建配置
 ```
 
 ## 开发约定

@@ -1885,3 +1885,20 @@ M scripts/verify-final.mjs
  M src/services/repository.ts
  M src/utils/recapMedia.ts
 ```
+
+
+### 工作日志 2026年8月31日 01:03
+
+- 记录：V3.9 Android 首个安装包：接入 Capacitor Android 8，生成应用 ID com.dobblemode.app、显示名留白的原生工程；新增 android:sync / android:open / android:apk 命令、Android 打包验收文档及 5 项原生工程自动检查。已安装本机 Android SDK 36，完成 clean rebuild，debug APK 已生成并校验 SHA-256：83A9E07D32B544861114BB2BCE5ECEFDCD67B301380794C10741075A2B6F2FA2，位置 android/app/build/outputs/apk/debug/app-debug.apk。npm run verify 55/55、npm run build、git diff --check 通过。待真机安装验收；当前邮箱确认完成后需返回 App 手动登录，深度链接和应用商店 release 签名未做。
+- 记录时 HEAD：`7df3a6e`
+- 工作区状态：
+
+```text
+M README.md
+ M package-lock.json
+ M package.json
+ M scripts/verify-final.mjs
+?? android/
+?? capacitor.config.ts
+?? docs/ANDROID_BUILD.md
+```
