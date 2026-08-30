@@ -123,6 +123,18 @@ const allSrc = ['src/App.tsx', 'src/services/cloud.ts', 'src/services/repository
 if (!/service_role/i.test(allSrc)) ok('no service role key references in frontend source')
 else fail('no service role key references in frontend source')
 
+console.log('\nPrimary authentication and recap media (V3.7/V3.8)')
+const authSource = source(['src', 'services', 'auth.ts'])
+if (cloudSource.includes('getPrimarySession') && cloudSource.includes('onPrimaryAuthStateChange') && appSource.includes('SupabaseAuthPage')) ok('Supabase email/password is the primary login')
+else fail('Supabase email/password is the primary login')
+if (authSource.includes('verifyLocalAccount') && appSource.includes('LocalDataMigration') && appSource.includes('getLocalAccountCandidates')) ok('old local accounts require verification before migration')
+else fail('old local accounts require verification before migration')
+const recapMediaSource = source(['src', 'utils', 'recapMedia.ts'])
+if (recapMediaSource.includes('VIDEO_FRACTIONS') && recapMediaSource.includes('frameSignal') && recapMediaSource.includes('differentEnough')) ok('recap video uses multi-point quality-screened sampling')
+else fail('recap video uses multi-point quality-screened sampling')
+if (existsSync(join(root, 'src', 'data', 'recapTemplates.ts')) && existsSync(join(root, 'docs', 'RECAP_TEMPLATE_DESIGN.md'))) ok('recap copy and design guide are editable')
+else fail('recap copy and design guide are editable')
+
 console.log('\nProfessional mode (V3.0)')
 if (appSource.includes('ProfessionalMode')) ok('App wires the professional mode UI')
 else fail('App wires the professional mode UI')

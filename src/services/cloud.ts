@@ -1,3 +1,4 @@
+import type { AppSession } from './auth'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
@@ -66,4 +67,22 @@ export async function pushCloudState(state: unknown): Promise<CloudResult<string
     .single()
   if (error) return { ok: false, error: error.message }
   return { ok: true, data: String(data.updated_at) }
+}
+
+
+export async function getPrimarySession(): Promise<AppSession | null> {
+  if (!supabase) return null
+  const { data, error } = await supabase.auth.getSession()
+  const user = error ? null : data.session?.user
+  if (!user?.email) return null
+  return { userId: user.id, username: user.email.split('@')[0] || user.email, email: user.email, provider: 'supabase' }
+}
+
+export function onPrimaryAuthStateChange(callback: (session: AppSession | null) => void) {
+  if (!supabase) return { unsubscribe: () => undefined }
+  const { data } = supabase.auth.onAuthStateChange((_event, next) => {
+    const user = next?.user
+    callback(user?.email ? { userId: user.id, username: user.email.split('@')[0] || user.email, email: user.email, provider: 'supabase' } : null)
+  })
+  return data.subscription
 }

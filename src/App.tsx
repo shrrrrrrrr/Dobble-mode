@@ -1,15 +1,21 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import type { FeedbackEvent, Platform, Post, ProfessionalTab, Tab, UserProfile, Work } from './types'
 import { compressImage } from './utils/image'
+import { createRecapMedia } from './utils/recapMedia'
+import { recapCopy } from './data/recapTemplates'
 import { buildCalendarArt } from './utils/calendarArt'
-import { AppSession, getSession, registerLocalAccount, signInLocalAccount, signOut } from './services/auth'
+import { type AppSession, getLocalAccountCandidates, verifyLocalAccount } from './services/auth'
 import { importLegacyV1Data, markLegacyDismissed, markLegacyImported, shouldOfferLegacyImport } from './services/legacyImport'
 import { emptyAppState, LocalAppRepository, normalizeAppState, type AppState } from './services/repository'
-import { cloudEnabled, cloudSignIn, cloudSignOut, cloudSignUp, fetchCloudState, getCloudAccount, pushCloudState, type CloudAccount } from './services/cloud'
+import { cloudEnabled, cloudSignIn, cloudSignOut, cloudSignUp, fetchCloudState, getCloudAccount, getPrimarySession, onPrimaryAuthStateChange, pushCloudState, type CloudAccount } from './services/cloud'
 import { badgeRules, evaluateBadges } from './services/badges'
 import { seasonPacks, themePacks, type SeasonId, type ThemeId } from './theme'
 import { ProfessionalMode } from './professional/ProfessionalMode'
 import { Modal } from './components/Modal'
+
+function hasSavedContent(state: AppState) {
+  return state.works.length + state.feedback.length + state.posts.length + state.topics.length + state.scoreRecords.length + state.reviews.length > 0
+}
 
 function storageErrorMessage(error: unknown) {
   if (error instanceof DOMException && (error.name === 'QuotaExceededError' || error.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
@@ -72,6 +78,9 @@ export default function App() {
   const [assistantPinned, setAssistantPinned] = useState(false)
   const [assistantHovered, setAssistantHovered] = useState(false)
   const [legacyImportOpen, setLegacyImportOpen] = useState(false)
+  const [localMigrationOpen, setLocalMigrationOpen] = useState(false)
+  const [localMigrationCandidates, setLocalMigrationCandidates] = useState<{ userId: string; username: string }[]>([])
+  const [migrationReady, setMigrationReady] = useState(false)
   const [notice, setNotice] = useState('')
   const [feedbackWorkId, setFeedbackWorkId] = useState<string | null>(null)
   const [question, setQuestion] = useState('')
@@ -85,21 +94,51 @@ export default function App() {
   const assistantPanelRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    if (!session) {
+    let cancelled = false
+    if (!session || !repository) {
       setStateUserId(null)
       setLegacyImportOpen(false)
-      return
+      setLocalMigrationOpen(false)
+      setMigrationReady(false)
+      return () => { cancelled = true }
     }
     setStateUserId(null)
-    if (!repository) return
-    repository.load().then(nextState => {
+    setMigrationReady(false)
+    ;(async () => {
+      let nextState = await repository.load()
+      if (cloudEnabled) {
+        const snapshot = await fetchCloudState()
+        if (snapshot) {
+          const cloudState = normalizeAppState(session.userId, snapshot.state as Partial<AppState>)
+          if (hasSavedContent(cloudState)) {
+            nextState = cloudState
+            await repository.save(nextState)
+            setCloudSyncedAt(new Date().toLocaleString('zh-CN'))
+          }
+        }
+      }
+      if (cancelled) return
       setState(nextState)
       setStateUserId(session.userId)
       setLegacyImportOpen(shouldOfferLegacyImport(session.userId, nextState))
-    })
+      if (!hasSavedContent(nextState)) {
+        const candidates = [] as { userId: string; username: string }[]
+        for (const candidate of getLocalAccountCandidates()) {
+          const legacyState = await new LocalAppRepository(candidate.userId).load()
+          if (hasSavedContent(legacyState)) candidates.push(candidate)
+        }
+        if (!cancelled && candidates.length) {
+          setLocalMigrationCandidates(candidates)
+          setLocalMigrationOpen(true)
+          return
+        }
+      }
+      if (!cancelled) setMigrationReady(true)
+    })().catch(error => { if (!cancelled) setNotice(storageErrorMessage(error)) })
+    return () => { cancelled = true }
   }, [session, repository])
   useEffect(() => {
-    if (!session || !repository || stateUserId !== session.userId) return
+    if (!session || !repository || stateUserId !== session.userId || !migrationReady) return
     repository.save(state).then(() => setNotice('')).catch(error => setNotice(storageErrorMessage(error)))
     if (cloudEnabled && cloudAccount) {
       if (cloudPushTimer.current) window.clearTimeout(cloudPushTimer.current)
@@ -113,7 +152,13 @@ export default function App() {
   useEffect(() => { document.body.dataset.theme = state.theme }, [state.theme])
   useEffect(() => { document.body.dataset.mode = state.mode }, [state.mode])
   useEffect(() => { const timer = window.setInterval(() => setClock(new Date()), 1000); return () => window.clearInterval(timer) }, [])
-  useEffect(() => { getSession().then(savedSession => { setSession(savedSession); setSessionReady(true) }) }, [])
+  useEffect(() => {
+    if (!cloudEnabled) { setSession(null); setSessionReady(true); return }
+    let active = true
+    getPrimarySession().then(savedSession => { if (active) { setSession(savedSession); setSessionReady(true) } })
+    const subscription = onPrimaryAuthStateChange(nextSession => { if (active) { setSession(nextSession); setSessionReady(true) } })
+    return () => { active = false; subscription.unsubscribe() }
+  }, [])
   useEffect(() => {
     const closePinnedAssistant = (event: globalThis.PointerEvent) => {
       const target = event.target as Node
@@ -125,10 +170,10 @@ export default function App() {
   useEffect(() => {
     if (!cloudEnabled) return
     getCloudAccount().then(account => setCloudAccount(account))
-  }, [])
+  }, [session?.userId])
 
   useEffect(() => {
-    if (!cloudEnabled || !cloudAccount || !session || !repository || stateUserId !== session.userId) return
+    if (!cloudEnabled || !cloudAccount || !session || !repository || stateUserId !== session.userId || !migrationReady) return
     let cancelled = false
     ;(async () => {
       setCloudBusy(true)
@@ -181,12 +226,6 @@ export default function App() {
     }
   }
 
-  async function handleCloudSignOut() {
-    await cloudSignOut()
-    setCloudAccount(null)
-    setCloudMessage('')
-    setCloudSyncedAt('')
-  }
 
   useEffect(() => {
     if (!session || stateUserId !== session.userId) return
@@ -245,13 +284,15 @@ export default function App() {
     try {
       const form = new FormData(event.currentTarget)
       const imageFile = form.get('coverImage')
-      const coverImage = imageFile instanceof File && imageFile.size > 0 ? await compressImage(imageFile) : undefined
+      const recapFiles = form.getAll('recapMedia').filter((value): value is File => value instanceof File && value.size > 0)
+      const recapMedia = recapFiles.length ? await createRecapMedia(recapFiles) : []
+      const coverImage = imageFile instanceof File && imageFile.size > 0 ? await compressImage(imageFile) : recapMedia.find(item => item.kind === 'image')?.dataUrl
       const newWork: Work = {
         id: crypto.randomUUID(), title: String(form.get('title')).trim(), platform: form.get('platform') as Platform,
         publishedAt: String(form.get('publishedAt')), cover: String(form.get('cover')).trim() || '新作品',
         plays: Number(form.get('plays')) || 0, likes: Number(form.get('likes')) || 0,
         comments: Number(form.get('comments')) || 0, favorites: Number(form.get('favorites')) || 0,
-        shares: Number(form.get('shares')) || 0, note: String(form.get('note')).trim(), mood: form.get('mood') as Work['mood'], coverImage,
+        shares: Number(form.get('shares')) || 0, note: String(form.get('note')).trim(), mood: form.get('mood') as Work['mood'], coverImage, recapMedia,
       }
       setState((current: typeof state) => ({ ...current, works: [newWork, ...current.works] }))
       setShowWorkForm(false)
@@ -334,7 +375,7 @@ export default function App() {
   }
 
   async function handleSignOut() {
-    await signOut()
+    await cloudSignOut()
     setSession(null)
   }
 
@@ -360,7 +401,8 @@ export default function App() {
   const proNav = [{ id: 'topics', label: '选题' }, { id: 'scoring', label: '评分' }, { id: 'review', label: '复盘' }, { id: 'data', label: '数据' }] as const
 
   if (!sessionReady) return <main className="app-shell"><section className="auth-loading">正在打开你的创作桌面...</section></main>
-  if (!session) return <LocalAuthPage onAuthenticated={setSession} />
+  if (!cloudEnabled) return <SupabaseConfigRequired />
+  if (!session) return <SupabaseAuthPage onAuthenticated={setSession} />
 
   return <main className="app-shell">
     <PixelBackground theme={theme} season={season} />
@@ -372,7 +414,7 @@ export default function App() {
           {tab === 'home' && <Home works={recentWorks} feedback={recentFeedback} clockText={formatClock(clock)} clock={clock} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} onNavigate={nextTab => { setTab(nextTab); if (nextTab === 'community') setCommunityView('feed') }} />}
           {tab === 'works' && <Works works={state.works} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} />}
           {tab === 'memories' && <Memories memories={memories} works={recentWorks} onOpenRecap={() => setSelectedRecap(true)} />}
-          {tab === 'community' && <Community userId={session.userId} view={communityView} profile={state.profile} posts={state.posts} onAdd={() => setShowPostForm(true)} onLike={toggleLike} onComment={addComment} onViewChange={setCommunityView} onEditProfile={() => setShowProfileForm(true)} badgeWall={<BadgeWall badges={state.badges} state={state} />} cloudPanel={<CloudSyncPanel account={cloudAccount} busy={cloudBusy} message={cloudMessage} syncedAt={cloudSyncedAt} onSignIn={async (email, password) => { const result = await cloudSignIn(email, password); if (result.ok) { setCloudAccount(result.data); setCloudMessage('') } return result.ok ? null : result.error }} onSignUp={async (email, password) => { const result = await cloudSignUp(email, password); if (result.ok) { setCloudAccount(result.data); setCloudMessage('') } return result.ok ? null : result.error }} onSignOut={handleCloudSignOut} onSyncNow={syncCloudNow} />} />}
+          {tab === 'community' && <Community userId={session.userId} view={communityView} profile={state.profile} posts={state.posts} onAdd={() => setShowPostForm(true)} onLike={toggleLike} onComment={addComment} onViewChange={setCommunityView} onEditProfile={() => setShowProfileForm(true)} badgeWall={<BadgeWall badges={state.badges} state={state} />} cloudPanel={<CloudSyncPanel account={cloudAccount} busy={cloudBusy} message={cloudMessage} syncedAt={cloudSyncedAt} onSignOut={handleSignOut} onSyncNow={syncCloudNow} />} />}
         </>}
       </div>
       {!selectedWork && !selectedRecap && (state.mode === 'professional'
@@ -385,6 +427,18 @@ export default function App() {
     {showPostForm && <Modal title="发布到社区" onClose={() => setShowPostForm(false)}><PostForm onSave={savePost} /></Modal>}
     {showProfileForm && <Modal title="编辑个人资料" onClose={() => setShowProfileForm(false)}><ProfileForm profile={state.profile} onSave={saveProfile} /></Modal>}
     {feedbackWorkId && <Modal title="记录一个珍藏时刻" onClose={() => setFeedbackWorkId(null)}><FeedbackForm onSave={saveFeedback} /></Modal>}
+    {localMigrationOpen && <Modal title="迁移旧本地账号" onClose={() => { setLocalMigrationOpen(false); setMigrationReady(true) }}><LocalDataMigration candidates={localMigrationCandidates} onMigrate={async (username, password) => {
+      const legacySession = await verifyLocalAccount(username, password)
+      const legacyState = await new LocalAppRepository(legacySession.userId).load()
+      const migrated = normalizeAppState(session!.userId, legacyState)
+      setState(migrated)
+      if (repository) await repository.save(migrated)
+      const result = await pushCloudState(migrated)
+      if (!result.ok) throw new Error(result.error)
+      setLocalMigrationOpen(false)
+      setMigrationReady(true)
+      setCloudSyncedAt(new Date().toLocaleString('zh-CN'))
+    }} onSkip={() => { setLocalMigrationOpen(false); setMigrationReady(true) }} /></Modal>}
     {legacyImportOpen && <Modal title="发现旧版数据" onClose={dismissLegacyImport}><div className="legacy-import"><p>检测到这台设备上还有 V1.2 及以前的创作记录。要导入到当前账号吗？</p><p className="legacy-import-note">导入只会复制到当前账号，不会删除旧数据。如果跳过，之后不会再提示。</p><div className="legacy-import-actions"><button className="primary" onClick={acceptLegacyImport}>导入到当前账号</button><button className="text-action" onClick={dismissLegacyImport}>暂不导入</button></div></div></Modal>}
   </main>
 }
@@ -532,9 +586,13 @@ function PixelatedVideoBackground({ source, poster, className, focalPoint }: { s
   return <><canvas ref={canvasRef} className={`pixel-canvas-bg pixel-video-bg ${className}`} aria-hidden="true" /><video ref={videoRef} className="pixel-video-source" autoPlay muted loop playsInline preload="auto" poster={poster}><source src={source} type={mediaType} /></video></>
 }
 
-function LocalAuthPage({ onAuthenticated }: { onAuthenticated: (session: AppSession) => void }) {
+function SupabaseConfigRequired() {
+  return <main className="auth-shell"><section className="auth-card"><div className="auth-sticker">留</div><p className="eyebrow">账号配置</p><h1>还差一点<br />就能登录。</h1><p className="auth-copy">这个版本已使用 Supabase 邮箱密码登录。请先在 Vercel 或本地环境变量中设置项目 URL 与 Anon Key。</p><p className="auth-message">具体位置见 docs/SUPABASE_SETUP.md。</p></section></main>
+}
+
+function SupabaseAuthPage({ onAuthenticated }: { onAuthenticated: (session: AppSession) => void }) {
   const [registering, setRegistering] = useState(false)
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
@@ -544,16 +602,31 @@ function LocalAuthPage({ onAuthenticated }: { onAuthenticated: (session: AppSess
     setLoading(true)
     setMessage('')
     try {
-      const nextSession = registering ? await registerLocalAccount(username, password) : await signInLocalAccount(username, password)
+      const result = registering ? await cloudSignUp(email.trim(), password) : await cloudSignIn(email.trim(), password)
+      if (!result.ok) throw new Error(result.error)
+      const nextSession = await getPrimarySession()
+      if (!nextSession) { setMessage('注册成功。请先完成邮箱验证，再回来登录。'); return }
       onAuthenticated(nextSession)
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '操作失败，请重新尝试。')
     } finally { setLoading(false) }
   }
 
-  return <main className="auth-shell"><section className="auth-card"><div className="auth-sticker">留</div><p className="eyebrow">创作生活</p><h1>{registering ? <>创建你的<br />创作桌面。</> : <>先把你自己<br />带进来。</>}</h1><p className="auth-copy">账号仅保存在当前设备。作品、回忆和社区记录会按账号分别保存。</p><form className="auth-form" onSubmit={submit}><label>账号<input value={username} onChange={event => setUsername(event.target.value)} placeholder="3–20 位字母、数字、下划线或短横线" maxLength={20} required autoFocus /></label><label>密码<input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="至少 6 位" minLength={6} required /></label><button className="primary" disabled={loading}>{loading ? '处理中...' : registering ? '创建并进入' : '进入创作桌面'}</button></form><button className="text-action auth-switch" onClick={() => { setRegistering(value => !value); setMessage('') }}>{registering ? '已有账号？直接登录' : '第一次来？创建本地账号'}</button><p className="auth-message">{message}</p><p className="auth-preview">当前为本地账号体验，不连接云端。若设备上有旧版数据，登录后可选择导入。</p></section></main>
+  return <main className="auth-shell"><section className="auth-card"><div className="auth-sticker">留</div><p className="eyebrow">创作生活</p><h1>{registering ? <>创建你的<br />创作桌面。</> : <>先把你自己<br />带进来。</>}</h1><p className="auth-copy">使用邮箱和密码进入。数据将和 Supabase 账号绑定，可在已登录的设备之间同步。</p><form className="auth-form" onSubmit={submit}><label>邮箱<input type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="you@example.com" required autoFocus autoComplete="email" /></label><label>密码<input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="至少 6 位" minLength={6} required autoComplete={registering ? 'new-password' : 'current-password'} /></label><button className="primary" disabled={loading}>{loading ? '处理中...' : registering ? '创建并进入' : '进入创作桌面'}</button></form><button className="text-action auth-switch" onClick={() => { setRegistering(value => !value); setMessage('') }}>{registering ? '已有账号？直接登录' : '第一次来？创建账号'}</button><p className="auth-message">{message}</p><p className="auth-preview">首次登录时，如检测到当前设备有旧本地账号，会要求验证旧账号后复制数据；旧数据不会被删除。</p></section></main>
 }
 
+function LocalDataMigration({ candidates, onMigrate, onSkip }: { candidates: { userId: string; username: string }[]; onMigrate: (username: string, password: string) => Promise<void>; onSkip: () => void }) {
+  const [username, setUsername] = useState(candidates[0]?.username ?? '')
+  const [password, setPassword] = useState('')
+  const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState(false)
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setBusy(true); setMessage('')
+    try { await onMigrate(username, password) } catch (error) { setMessage(error instanceof Error ? error.message : '迁移失败，请重试。') } finally { setBusy(false) }
+  }
+  return <form className="entry-form local-migration" onSubmit={submit}><p>检测到这台设备上有旧本地账号的创作记录。验证旧账号后，会将其复制到当前 Supabase 账号并同步；原本地数据不会删除。</p><label>旧账号<select value={username} onChange={event => setUsername(event.target.value)}>{candidates.map(candidate => <option value={candidate.username} key={candidate.userId}>{candidate.username}</option>)}</select></label><label>旧账号密码<input type="password" value={password} onChange={event => setPassword(event.target.value)} required autoComplete="current-password" /></label>{message && <p className="auth-message">{message}</p>}<button className="primary" disabled={busy}>{busy ? '迁移中...' : '验证并迁移数据'}</button><button type="button" className="text-action" onClick={onSkip}>暂不迁移</button></form>
+}
 function useCalendarArt(date: Date) {
   const [art, setArt] = useState('')
   const dateKey = localDateString(date)
@@ -619,58 +692,19 @@ function BadgeWall({ badges, state }: { badges: Record<string, string>; state: A
   </div>
 }
 
-function CloudSyncPanel({ account, busy, message, syncedAt, onSignIn, onSignUp, onSignOut, onSyncNow }: { account: CloudAccount | null; busy: boolean; message: string; syncedAt: string; onSignIn: (email: string, password: string) => Promise<string | null>; onSignUp: (email: string, password: string) => Promise<string | null>; onSignOut: () => void; onSyncNow: () => void }) {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [registering, setRegistering] = useState(false)
-  const [formMessage, setFormMessage] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setSubmitting(true)
-    setFormMessage('')
-    const error = registering ? await onSignUp(email.trim(), password) : await onSignIn(email.trim(), password)
-    if (error) setFormMessage(error)
-    else { setPassword(''); setFormMessage('') }
-    setSubmitting(false)
-  }
-
-  return <section className="cloud-sync">
-    <p className="eyebrow">云同步</p>
-    {!cloudEnabled && <p className="cloud-hint">云端未配置。在项目根目录创建 .env.local 并填入 Supabase 地址与 Anon Key 后，可开启跨设备同步。</p>}
-    {cloudEnabled && !account && <form className="cloud-form" onSubmit={submit}>
-      <p className="cloud-hint">云账号用于跨设备同步，与本地登录账号相互独立。使用邮箱和密码创建或登录。</p>
-      <label>邮箱<input type="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="you@example.com" required autoComplete="email" /></label>
-      <label>密码<input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="至少 6 位" minLength={6} required autoComplete={registering ? 'new-password' : 'current-password'} /></label>
-      <div className="cloud-actions">
-        <button className="primary compact-static" type="submit" disabled={submitting}>{submitting ? '处理中...' : registering ? '创建云账号' : '登录云账号'}</button>
-        <button type="button" className="text-action" onClick={() => { setRegistering(value => !value); setFormMessage('') }}>{registering ? '已有云账号？直接登录' : '第一次使用？创建云账号'}</button>
-      </div>
-      {formMessage && <p className="cloud-message">{formMessage}</p>}
-    </form>}
-    {cloudEnabled && account && <div className="cloud-status">
-      <p><strong>{account.email}</strong></p>
-      {syncedAt && <small>上次同步：{syncedAt}</small>}
-      {message && <p className="cloud-message">{message}</p>}
-      <div className="cloud-actions">
-        <button className="primary compact-static" onClick={onSyncNow} disabled={busy}>{busy ? '同步中...' : '立即同步'}</button>
-        <button type="button" className="text-action" onClick={onSignOut}>退出云账号</button>
-      </div>
-      <p className="cloud-hint">同一时间在一台设备上编辑即可；两台设备都改过时，以最后保存的一端为准。</p>
-    </div>}
-  </section>
+function CloudSyncPanel({ account, busy, message, syncedAt, onSignOut, onSyncNow }: { account: CloudAccount | null; busy: boolean; message: string; syncedAt: string; onSignOut: () => void; onSyncNow: () => void }) {
+  return <section className="cloud-sync"><p className="eyebrow">账号与同步</p>{!account ? <p className="cloud-hint">正在确认当前账号的云端状态...</p> : <div className="cloud-status"><p><strong>{account.email}</strong></p>{syncedAt && <small>上次同步：{syncedAt}</small>}{message && <p className="cloud-message">{message}</p>}<div className="cloud-actions"><button className="primary compact-static" onClick={onSyncNow} disabled={busy}>{busy ? '同步中...' : '立即同步'}</button><button type="button" className="text-action" onClick={onSignOut}>退出账号</button></div><p className="cloud-hint">同一时间在一台设备上编辑即可；两台设备都改过时，以最后保存的一端为准。</p></div>}</section>
 }
 
 function Community({ userId, view, profile, posts, onAdd, onLike, onComment, onViewChange, onEditProfile, badgeWall, cloudPanel }: { userId: string; view: 'feed' | 'profile'; profile: UserProfile; posts: Post[]; onAdd: () => void; onLike: (id: string) => void; onComment: (id: string, comment: string) => void; onViewChange: (view: 'feed' | 'profile') => void; onEditProfile: () => void; badgeWall: ReactNode; cloudPanel: ReactNode }) {
   const [replyingTo, setReplyingTo] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const myPosts = posts.filter(post => post.userId === userId)
-  if (view === 'profile') return <><section className="profile-page"><button className="profile-nav-button back-button" onClick={() => onViewChange('feed')}>返回社区</button><button className="profile-nav-button edit-profile-button" onClick={onEditProfile}>编辑资料</button><div className="profile-avatar">{profile.avatarImage ? <img src={profile.avatarImage} alt="我的头像" /> : profile.avatarLabel}</div><p className="eyebrow">个人主页</p><h1>{profile.nickname}的创作角落</h1><p className="profile-note">资料已保存在当前设备；接入账号后会同步至云端。</p>{badgeWall}{cloudPanel}</section><section className="section"><p className="eyebrow">我的发帖</p>{myPosts.length ? myPosts.map(post => <article className="post mine" key={post.id}><p className="post-content">{post.content}</p><small>{formatPostTime(post.createdAt)} · {post.likes} 次喜欢</small></article>) : <p className="empty">你还没有发布内容。去社区说说正在经历的创作吧。</p>}</section></>
+  if (view === 'profile') return <><section className="profile-page"><button className="profile-nav-button back-button" onClick={() => onViewChange('feed')}>返回社区</button><button className="profile-nav-button edit-profile-button" onClick={onEditProfile}>编辑资料</button><div className="profile-avatar">{profile.avatarImage ? <img src={profile.avatarImage} alt="我的头像" /> : profile.avatarLabel}</div><p className="eyebrow">个人主页</p><h1>{profile.nickname}的创作角落</h1><p className="profile-note">资料已绑定当前账号，并同步到云端。</p>{badgeWall}{cloudPanel}</section><section className="section"><p className="eyebrow">我的发帖</p>{myPosts.length ? myPosts.map(post => <article className="post mine" key={post.id}><p className="post-content">{post.content}</p><small>{formatPostTime(post.createdAt)} · {post.likes} 次喜欢</small></article>) : <p className="empty">你还没有发布内容。去社区说说正在经历的创作吧。</p>}</section></>
   return <><section className="page-head community-head"><p className="eyebrow">创作者社区</p><h1>说说你正在<br />经历的创作。</h1><div className="community-actions"><button className="profile-nav-button" onClick={() => onViewChange('profile')}>我的</button><button className="primary compact" onClick={onAdd}>发布</button></div></section><div className="post-list">{posts.map(post => { const isMine = post.userId === userId; const author = isMine ? profile.nickname : post.author; const avatar = isMine ? profile.avatarLabel : post.avatar; return <article className="post" key={post.id}><div className="post-author"><span className="avatar">{avatar}</span><div><strong>{author}</strong><small>{formatPostTime(post.createdAt)}</small></div></div><p className="post-content">{post.content}</p>{post.image && <img className="post-image" src={post.image} alt={post.imageCaption || '社区图片'} />}{!post.image && post.imageCaption && <div className="post-image">{post.imageCaption}</div>}<div className="post-actions"><button className={post.liked ? 'liked' : ''} onClick={() => onLike(post.id)}>喜欢 {post.likes}</button><button onClick={() => setReplyingTo(replyingTo === post.id ? null : post.id)}>回应 {post.comments.length}</button></div>{replyingTo === post.id && <form className="reply-form" onSubmit={event => { event.preventDefault(); onComment(post.id, draft.trim()); setDraft(''); setReplyingTo(null) }}><input value={draft} onChange={event => setDraft(event.target.value)} placeholder="写下你的回应" autoFocus /><button disabled={!draft.trim()}>发送</button></form>}{post.comments.slice(-2).map((comment, index) => <p className="comment" key={index}>{comment}</p>)}</article> })}</div></>
 }
 
-function WorkForm({ onSave }: { onSave: (event: FormEvent<HTMLFormElement>) => void | Promise<void> }) { return <form className="entry-form" onSubmit={onSave}><label>标题<input name="title" required placeholder="这条作品叫什么？" /></label><div className="two-columns"><label>平台<select name="platform" defaultValue="小红书"><option>抖音</option><option>小红书</option><option>B站</option><option>视频号</option></select></label><label>发布时间<input name="publishedAt" type="date" defaultValue={today} /></label></div><div className="two-columns"><label>观看/阅读<input name="plays" type="number" min="0" placeholder="0" /></label><label>点赞<input name="likes" type="number" min="0" placeholder="0" /></label></div><div className="two-columns"><label>评论<input name="comments" type="number" min="0" placeholder="0" /></label><label>收藏<input name="favorites" type="number" min="0" placeholder="0" /></label></div><label>分享<input name="shares" type="number" min="0" placeholder="0" /></label><label>封面印象<input name="cover" placeholder="例如：窗边、晚餐、街道" /></label><label>上传封面<input name="coverImage" type="file" accept="image/*" /></label><label>此刻的感受<select name="mood" defaultValue="平静"><option>雀跃</option><option>平静</option><option>疲惫</option><option>骄傲</option></select></label><label>作品便签<textarea name="note" placeholder="不必写得漂亮，留下当时的自己就好。" /></label><button className="primary" type="submit">保存作品</button></form> }
+function WorkForm({ onSave }: { onSave: (event: FormEvent<HTMLFormElement>) => void | Promise<void> }) { return <form className="entry-form" onSubmit={onSave}><label>标题<input name="title" required placeholder="这条作品叫什么？" /></label><div className="two-columns"><label>平台<select name="platform" defaultValue="小红书"><option>抖音</option><option>小红书</option><option>B站</option><option>视频号</option></select></label><label>发布时间<input name="publishedAt" type="date" defaultValue={today} /></label></div><div className="two-columns"><label>观看/阅读<input name="plays" type="number" min="0" placeholder="0" /></label><label>点赞<input name="likes" type="number" min="0" placeholder="0" /></label></div><div className="two-columns"><label>评论<input name="comments" type="number" min="0" placeholder="0" /></label><label>收藏<input name="favorites" type="number" min="0" placeholder="0" /></label></div><label>分享<input name="shares" type="number" min="0" placeholder="0" /></label><label>封面印象<input name="cover" placeholder="例如：窗边、晚餐、街道" /></label><label>上传封面<input name="coverImage" type="file" accept="image/*" /></label><label>回忆画面（图片或视频，可多选）<input name="recapMedia" type="file" accept="image/*,video/*" multiple /></label><p className="form-hint">视频会从多个中段时间点采样，自动跳过过暗、低信息和相似画面，只保存用于回忆的压缩截图。</p><label>此刻的感受<select name="mood" defaultValue="平静"><option>雀跃</option><option>平静</option><option>疲惫</option><option>骄傲</option></select></label><label>作品便签<textarea name="note" placeholder="不必写得漂亮，留下当时的自己就好。" /></label><button className="primary" type="submit">保存作品</button></form> }
 
 function PostForm({ onSave }: { onSave: (event: FormEvent<HTMLFormElement>) => void | Promise<void> }) { return <form className="entry-form" onSubmit={onSave}><label>想说的话<textarea name="content" required placeholder="只支持普通文字。" /></label><label>上传图片<input name="image" type="file" accept="image/*" /></label><label>图片说明<input name="imageCaption" placeholder="例如：我的工作台" /></label><button className="primary" type="submit">发布</button></form> }
 
@@ -686,13 +720,15 @@ function WeeklyRecap({ works, feedback, onClose }: { works: Work[]; feedback: Fe
   const recent = works.filter(work => isInRecentSevenDays(work.publishedAt, recentWindow)).slice(0, 3)
   const recentFeedback = feedback.filter(item => isInRecentSevenDays(item.createdAt, recentWindow))
   const favorite = recent.slice().sort((a, b) => b.likes - a.likes)[0]
+  const recapMedia = favorite?.recapMedia?.slice(0, 3) ?? []
   const slides = recent.length ? [
-    <><p className="eyebrow">本周创作回看</p><h1>这七天，<br />你没有白过。</h1><strong className="recap-number">{recent.length}</strong><p>条作品被认真留了下来。</p></>,
-    <><p className="eyebrow">被更多人看见</p><h1>《{favorite?.title ?? '你的作品'}》</h1><strong className="recap-number">{number(favorite?.likes ?? 0)}</strong><p>个喜欢，是这周最明亮的回应。</p></>,
-    <><p className="eyebrow">你当时写下</p><blockquote className="recap-quote">“{recent[0]?.note || '把这一周的感受，留给下一次自己。'}”</blockquote><p>不止数据，你也记住了那个时刻的自己。</p></>,
-    <><p className="eyebrow">收下这些声音</p><h1>本周有 {recentFeedback.length} 个<br />值得收藏的时刻。</h1><p>{recentFeedback[0]?.content || '下一周，也继续为自己留下一个时刻。'}</p></>,
+    <><p className="eyebrow">{recapCopy.opening.eyebrow}</p><h1>{recapCopy.opening.title.split('\n').map((line, index) => <span key={line}>{index > 0 && <br />}{line}</span>)}</h1><strong className="recap-number">{recent.length}</strong><p>{recapCopy.opening.suffix}</p></>,
+    <><p className="eyebrow">{recapCopy.favorite.eyebrow}</p><h1>《{favorite?.title ?? '你的作品'}》</h1><strong className="recap-number">{number(favorite?.likes ?? 0)}</strong><p>{recapCopy.favorite.suffix}</p></>,
+    ...(recapMedia.length ? [<><p className="eyebrow">{recapCopy.media.eyebrow}</p><h1>{recapCopy.media.title.split('\n').map((line, index) => <span key={line}>{index > 0 && <br />}{line}</span>)}</h1><div className="recap-media-strip">{recapMedia.map(frame => <img key={frame.id} src={frame.dataUrl} alt={`来自${frame.sourceName}的回忆画面`} />)}</div><p>{recapCopy.media.suffix}</p></>] : []),
+    <><p className="eyebrow">{recapCopy.note.eyebrow}</p><blockquote className="recap-quote">“{recent[0]?.note || '把这一周的感受，留给下一次自己。'}”</blockquote><p>{recapCopy.note.suffix}</p></>,
+    <><p className="eyebrow">{recapCopy.feedback.eyebrow}</p><h1>本周有 {recentFeedback.length} 个<br />值得收藏的时刻。</h1><p>{recentFeedback[0]?.content || recapCopy.feedback.suffix}</p></>,
   ] : [
-    <><p className="eyebrow">本周创作回看</p><h1>最近七天，<br />还没有作品记录。</h1><p>下一次记录作品时，这里会帮你收起当时的感受、数据和回应。</p></>,
+    <><p className="eyebrow">{recapCopy.empty.eyebrow}</p><h1>{recapCopy.empty.title.split('\n').map((line, index) => <span key={line}>{index > 0 && <br />}{line}</span>)}</h1><p>{recapCopy.empty.body}</p></>,
   ]
   return <section className="weekly-recap"><button className="back-link" onClick={onClose}>返回回忆</button><div className={`recap-slide recap-slide-${page}`} key={page}>{slides[page]}</div><div className="recap-progress">{slides.map((_, index) => <span className={index === page ? 'active' : ''} key={index} />)}</div><button className="primary recap-next" onClick={() => { if (slides.length === 1) { onClose() } else { setPage(page === slides.length - 1 ? 0 : page + 1) } }}>{slides.length === 1 ? '返回回忆' : page === slides.length - 1 ? '重新播放' : '下一页'}</button></section>
 }

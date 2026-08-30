@@ -1836,3 +1836,26 @@ M public/assets/pixel-original-poster.jpg
 ```text
 M src/styles.css
 ```
+
+
+### 工作日志 2026年8月30日 20:19
+
+- 记录：V3.7/V3.8：主登录已切为 Supabase Auth 邮箱+密码（无环境变量时显示配置页，不再回退本地登录）；Supabase 会话恢复与 auth state 订阅已接线。首次进入空云账号会检测当前设备旧本地账号数据，需选择旧账号并验证旧密码后才复制到当前 Supabase user_id、写本地缓存与 app_state；旧 LocalStorage 不删除，允许跳过。作品表单新增可多选的回忆图片/视频：图片压缩保存，视频从14/28/43/58/72/86%候选时间点采样，以亮度、对比度、颜色指纹跳过过暗低信息和相似画面，最多保留3张，不使用简单首末帧，也不保存原视频。回忆文案位置为 src/data/recapTemplates.ts，说明为 docs/RECAP_TEMPLATE_DESIGN.md；服务器与 Vercel 环境变量说明已更新至 docs/SUPABASE_SETUP.md、docs/DEPLOYMENT.md。已通过 npm run build、npm run verify（46/46）、git diff --check。待用户在 Vercel 配置 VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY、确认 Supabase 0002 app_state 迁移和 Email Provider/URL 配置后进行真实注册、迁移、跨设备同步验收。
+- 记录时 HEAD：`20c476c`
+- 工作区状态：
+
+```text
+M README.md
+ M docs/DEPLOYMENT.md
+ M docs/RECAP_COPY_GUIDE.md
+ M docs/SUPABASE_SETUP.md
+ M scripts/verify-final.mjs
+ M src/App.tsx
+ M src/services/auth.ts
+ M src/services/cloud.ts
+ M src/styles.css
+ M src/types.ts
+?? docs/RECAP_TEMPLATE_DESIGN.md
+?? src/data/
+?? src/utils/recapMedia.ts
+```

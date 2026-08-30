@@ -11,7 +11,8 @@ interface LocalAccount {
 export interface AppSession {
   userId: string
   username: string
-  provider: 'local'
+  provider: 'local' | 'supabase'
+  email?: string
 }
 
 function readAccounts(): LocalAccount[] {
@@ -48,19 +49,24 @@ export async function registerLocalAccount(username: string, password: string): 
   const normalized = normalizeUsername(username)
   if (!/^[a-z0-9_-]{3,20}$/.test(normalized)) throw new Error('账号需为 3–20 位字母、数字、下划线或短横线。')
   if (password.length < 6) throw new Error('密码至少需要 6 位。')
-
   const accounts = readAccounts()
   if (accounts.some(account => account.username === normalized)) throw new Error('这个账号已存在，请直接登录。')
-
   const salt = crypto.randomUUID()
   const account: LocalAccount = { id: crypto.randomUUID(), username: normalized, salt, passwordHash: await hashPassword(password, salt) }
   localStorage.setItem(accountsKey, JSON.stringify([...accounts, account]))
   return saveSession(account)
 }
 
-export async function signInLocalAccount(username: string, password: string): Promise<AppSession> {
+export async function verifyLocalAccount(username: string, password: string): Promise<AppSession> {
   const account = readAccounts().find(item => item.username === normalizeUsername(username))
-  if (!account || account.passwordHash !== await hashPassword(password, account.salt)) throw new Error('账号或密码不正确。')
+  if (!account || account.passwordHash !== await hashPassword(password, account.salt)) throw new Error('旧账号或密码不正确。')
+  return { userId: account.id, username: account.username, provider: 'local' }
+}
+
+export async function signInLocalAccount(username: string, password: string): Promise<AppSession> {
+  const session = await verifyLocalAccount(username, password)
+  const account = readAccounts().find(item => item.id === session.userId)
+  if (!account) throw new Error('账号不存在。')
   return saveSession(account)
 }
 
@@ -75,4 +81,8 @@ export async function getSession(): Promise<AppSession | null> {
 
 export async function signOut(): Promise<void> {
   localStorage.removeItem(sessionKey)
+}
+
+export function getLocalAccountCandidates() {
+  return readAccounts().map(account => ({ userId: account.id, username: account.username }))
 }

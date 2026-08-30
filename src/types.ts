@@ -53,6 +53,14 @@ export interface WorkReview {
   updatedAt: string
 }
 
+export interface RecapMediaFrame {
+  id: string
+  kind: 'image' | 'video'
+  dataUrl: string
+  sourceName: string
+  capturedAt?: number
+}
+
 export interface Work {
   id: string
   title: string
@@ -60,6 +68,8 @@ export interface Work {
   publishedAt: string
   cover: string
   coverImage?: string
+  /** Compressed images and quality-screened video samples for short recaps. */
+  recapMedia?: RecapMediaFrame[]
   plays: number
   likes: number
   comments: number

@@ -1,7 +1,7 @@
 # 部署指南（V2.1）
 
 > 目标：把「留白」构建为静态站点并部署到你自己的服务器，得到一个可分享的 HTTPS 地址。
-> 前端是纯静态产物（`dist/`），不依赖 Node 运行时；云端能力（可选）由 Supabase 托管。
+> 前端是纯静态产物（`dist/`），不依赖 Node 运行时；Supabase Auth 是主登录和云端数据同步服务。
 
 ## 1. 构建
 
@@ -12,7 +12,7 @@ npm run build
 
 产物在 `dist/`，包含 index.html、JS/CSS 和全部主题素材。
 
-**重要：环境变量在构建时注入。** 如果要启用云同步，构建前需要创建 `.env.local`：
+**重要：环境变量在构建时注入。** 主登录依赖 Supabase，构建前必须创建 `.env.local`：
 
 ```
 VITE_SUPABASE_URL=https://zsrhgtplolhxrbzxwfkq.supabase.co
@@ -21,7 +21,7 @@ VITE_SUPABASE_ANON_KEY=<你的 Anon Key>
 
 - 只使用 Anon Key（公开密钥，安全性由 RLS 行级策略保证）。
 - 绝对不要把 Service Role Key 放进任何前端环境变量。
-- 不配置这两个变量时，应用以纯本地模式运行，云同步入口会显示「云端未配置」。
+- 不配置这两个变量时，应用会显示账号配置页，不能再使用本地账号作为主登录。
 
 ## 2. 部署到你的服务器（nginx 示例）
 
@@ -73,3 +73,9 @@ sudo certbot --nginx -d your-domain.com
 
 每次更新：`git pull && npm install && npm run build`，然后重新上传 `dist/`。
 GitHub Actions（`.github/workflows/build.yml`）会在每次 push 时自动跑 `npm run verify`，保证构建不回归。
+
+## 6. Vercel 环境变量
+
+Vercel 控制台：**Dobble-mode 项目 → Settings → Environment Variables**。
+
+分别添加 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY`，选择 Production、Preview、Development 三个环境。保存后到 Deployments 重新部署一次；Vite 会在构建阶段把这两个公开配置写入静态站点。不要添加 `SUPABASE_SERVICE_ROLE_KEY`。

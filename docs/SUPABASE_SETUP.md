@@ -34,3 +34,20 @@
 - 前端只放 Anon Key（公开密钥，安全由 RLS 保证）；**绝不放 Service Role Key**。
 - 图片当前以压缩 Data URL 存于状态内；`creator-media` 桶上传与签名 URL 为 V2.2 候选。
 - 部署流程见 `docs/DEPLOYMENT.md`。
+
+## 5. V3.7 主登录：Supabase 邮箱 + 密码
+
+现在登录页直接使用 Supabase Auth 的邮箱和密码，项目必须配置以下构建环境变量：
+
+```text
+VITE_SUPABASE_URL=https://zsrhgtplolhxrbzxwfkq.supabase.co
+VITE_SUPABASE_ANON_KEY=<Project Settings → API → anon public>
+```
+
+本地开发写入根目录 `.env.local`（已被 git 忽略）；Vercel 在 **Project → Settings → Environment Variables** 中分别添加两项，并勾选 Production、Preview、Development 后重新部署。不要填写 Service Role Key。
+
+Supabase 控制台还需要确认：Authentication → Providers → Email 已开启；Authentication → URL Configuration 的 Site URL 为 `https://dobble-mode.vercel.app`，并把该地址加入 Redirect URLs。开启 Confirm email 时，新用户需先点验证邮件再登录。
+
+## 6. 旧本地账号迁移
+
+首次用 Supabase 登录一个没有云端数据的账号时，应用会检测当前设备的旧本地账号数据。选择旧账号并输入旧密码后，数据会复制到当前 Supabase 身份、写入 `app_state` 并同步。旧 LocalStorage 不会被删除；不迁移可选择“暂不迁移”。

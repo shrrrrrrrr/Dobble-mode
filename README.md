@@ -2,7 +2,7 @@
 
 面向内容创作者的双模式工具。生活模式记录作品、过程感受与值得记住的反馈，并整理成短期回看；专业模式管理选题、评分与复盘。
 
-当前版本：**V3.1**（生活/专业双模式 + 云同步 + 徽章系统；云端激活与服务器部署需要用户侧配置）
+当前版本：**V3.8**（Supabase 主登录、旧本地数据迁移、短周期回忆媒体采样）
 
 仓库：[github.com/shrrrrrrrr/Dobble-mode](https://github.com/shrrrrrrrr/Dobble-mode)
 
@@ -37,15 +37,15 @@ npm run verify
 
 ## 当前认证与数据
 
-- **登录方式：** 本地账号 + 密码（用户名 3–20 位字母、数字、下划线或短横线；密码至少 6 位）
-- **存储位置：** 默认仅当前浏览器设备
+- **登录方式：** Supabase 邮箱 + 密码（主登录）
+- **存储位置：** 当前设备有本地缓存，并自动同步到当前 Supabase 账号
 - **数据隔离：** 每个账号独立保存全部数据（`creator-life-v2:data:{userId}`）
 - **社区身份：** 新帖子保存稳定 `userId`；新帖子时间使用标准时间戳
 - **会话：** 刷新页面保持登录；点击「退出」后需重新登录
 
-### 云同步（V2.0，可选）
+### 云端同步与迁移（V3.7）
 
-本地账号照常使用；云账号（邮箱 + 密码，Supabase Auth）用于跨设备同步。在社区 →「我的」页面底部「云同步」开启。
+Supabase 邮箱 + 密码是主登录。首次登录会识别本机旧本地账号，验证旧密码后复制数据到当前云账号；旧数据不会删除。
 
 启用步骤：
 
@@ -53,7 +53,7 @@ npm run verify
 2. 在 Supabase SQL Editor 执行 `supabase/migrations/0002_cloud_state.sql`
 3. 重新 `npm run dev` / `npm run build`
 
-同步语义：整账号状态快照（JSONB，owner-only RLS）；两台设备都改过时以最后保存的一端为准。不配置环境变量时云端完全关闭，应用行为与纯本地一致。
+同步语义：整账号状态快照（JSONB，owner-only RLS）；两台设备都改过时以最后保存的一端为准。不配置环境变量时应用会显示账号配置页。服务器环境变量配置见 docs/SUPABASE_SETUP.md 和 docs/DEPLOYMENT.md。
 
 ### 暂不包含
 
@@ -87,12 +87,14 @@ src/
   App.tsx                      主界面、页面状态、云同步与徽章接线
   professional/                专业模式页面（选题/评分/复盘/数据）
   components/Modal.tsx         共享弹窗
-  services/auth.ts             本地账号注册 / 登录
+  services/auth.ts             旧本地账号验证 / 迁移支持
   services/repository.ts       应用数据访问接口与本地实现
-  services/cloud.ts            Supabase 云同步（可选）
+  services/cloud.ts            Supabase 主会话与云端同步
   services/badges.ts           徽章规则与计算
   services/legacyImport.ts     V1 旧数据导入
   utils/image.ts               图片压缩
+  utils/recapMedia.ts          视频多时间点截图与去重
+  data/recapTemplates.ts       可编辑回忆文案
   utils/calendarArt.ts         日历像素日期绘制
   theme.ts                     主题注册表
   types.ts                     数据类型
