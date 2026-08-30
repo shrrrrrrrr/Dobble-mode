@@ -226,7 +226,7 @@ h1,h2,h3,.brand,.companion span,.post-content,.work-copy { font-family:'Ma Shan 
 .app-shell::before { content:none; }
 .season-pixels { display:none; }
 .pixel-canvas-bg { position:fixed; inset:0; z-index:-2; width:100vw; height:100vh; display:block; pointer-events:none; image-rendering:pixelated; image-rendering:crisp-edges; filter:saturate(1.07) contrast(1.04) brightness(1.04); }
-.pixel-video-source { position:fixed; width:1px; height:1px; opacity:0; pointer-events:none; left:-10px; top:-10px; }
+.pixel-video-source { position:fixed; inset:0; z-index:-4; width:100vw; height:100dvh; object-fit:cover; opacity:.001; pointer-events:none; }
 .season-background,.sakura-background { background:none; animation:none; }
 .season-background::before,.season-background::after,.sakura-background::after { content:none; }
 
@@ -427,4 +427,37 @@ html,body,#root { min-width:0; }
   .pro-filter-row { width:100%; }
   .board-toolbar,.toolbar-actions,.topic-actions { flex-wrap:wrap; }
   .professional .page-head h1 { font-size:27px; }
+}
+
+/* Touch browsers may report a desktop-width viewport. Keep their app layout in one readable flow. */
+@media (hover:none) and (pointer:coarse) {
+  .app-shell { padding:0; align-items:stretch; }
+  .mobile-frame { width:100%; min-height:100dvh; padding-bottom:104px; overflow:visible; }
+  .topbar { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:9px; padding:11px 12px; }
+  .brand { grid-column:1; grid-row:1; }
+  .account-summary { grid-column:2; grid-row:1; margin-left:0; justify-content:flex-end; }
+  .mode-switch { grid-column:1/-1; grid-row:2; width:100%; justify-content:center; }
+  .theme-switcher { grid-column:1/-1; grid-row:3; width:100%; margin-left:0; justify-content:center; overflow-x:auto; }
+  .season-switcher { grid-column:1/-1; grid-row:4; width:100%; justify-content:flex-start; overflow-x:auto; }
+  .content { padding:0 12px 24px; }
+  .studio-layout { display:flex; flex-direction:column; gap:14px; padding:14px 0 0; }
+  .creator-aside,.studio-stage,.dashboard-rail { width:100%; min-width:0; }
+  .creator-aside { display:grid; grid-template-columns:auto minmax(0,1fr); min-height:0; gap:10px; padding:13px; }
+  .creator-aside .studio-nav,.creator-aside .aside-note { grid-column:1/-1; }
+  .creator-aside .studio-nav { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .dashboard-rail { display:grid; grid-template-columns:minmax(0,1fr); gap:12px; }
+  .studio-hero { min-height:210px; padding:22px 18px; }
+  .studio-hero h1,h1 { font-size:30px; }
+  .moments-board,.memory-stack,.metric-grid,.template-list,.two-columns { grid-template-columns:minmax(0,1fr); }
+  .work-card { grid-template-columns:76px minmax(0,1fr); gap:10px; }
+  .cover { height:96px; padding:8px; font-size:15px; }
+  .work-metrics,.toolbar-actions,.board-toolbar,.topic-actions { flex-wrap:wrap; }
+  .bottom-nav { width:calc(100% - 16px); left:8px; bottom:max(8px,env(safe-area-inset-bottom)); height:66px; }
+  .bottom-nav button { min-width:0; padding:7px 3px; font-size:11px; }
+  .nav-mark { width:21px; height:21px; }
+  .companion { right:2px; bottom:72px; }
+  body[data-theme='night'] .companion { right:-4px; bottom:60px; }
+  .assistant-panel { width:calc(100vw - 24px); right:12px; bottom:154px; }
+  .professional .page-head h1 { font-size:27px; }
+  .pro-filter-row { width:100%; overflow-x:auto; }
 }

@@ -1786,3 +1786,17 @@ M README.md
 ```text
 M HANDOFF.md
 ```
+
+
+### 工作日志 2026年8月30日 19:35
+
+- 记录：V3.7 手机端响应式修复：触屏设备强制单列流式布局，避免桌面三栏在手机浏览器缩放或桌面宽度报告时互相重叠；底栏和助手面板改为安全区定位；默认主题新增原视频 2.2 秒提取的像素海报帧，视频加载或 Canvas 取帧失败时仍显示同一构图的背景。已通过 npm run build、npm run verify（42/42）和 git diff --check；受本机浏览器自动化沙箱故障影响，未能生成 Playwright 移动端截图，需部署后在真实手机刷新验证。
+- 记录时 HEAD：`d40491f`
+- 工作区状态：
+
+```text
+M src/App.tsx
+ M src/styles.css
+ M src/theme.ts
+?? public/assets/pixel-original-poster.jpg
+```

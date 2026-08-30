@@ -26,7 +26,7 @@ export interface ThemePack {
 }
 
 export const themePacks: ThemePack[] = [
-  { id: 'mint', name: '默认主题', shortName: '默认', description: '浅蓝像素桌面与动态骑行背景。', available: true, backgroundVideo: '/assets/pixel-original.mp4', poster: '/assets/pixel-loop-preview.png' },
+  { id: 'mint', name: '默认主题', shortName: '默认', description: '浅蓝像素桌面与动态骑行背景。', available: true, backgroundVideo: '/assets/pixel-original.mp4', poster: '/assets/pixel-original-poster.jpg' },
   { id: 'cream', name: '北航四季', shortName: '北航', description: '蓝色校园像素材质与四季背景。', available: true },
   { id: 'night', name: '樱花夜', shortName: '樱花', description: '明亮樱花背景与循环飘落花瓣。', available: true, poster: '/assets/sakura/background.jpg' },
 ]

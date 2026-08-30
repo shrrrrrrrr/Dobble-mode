@@ -469,6 +469,18 @@ function PixelatedVideoBackground({ source, poster, className, focalPoint }: { s
     let frame = 0
     const firstFrame = document.createElement('canvas')
     let capturedFirstFrame = false
+    const posterImage = new Image()
+    let posterReady = false
+    const drawSource = (context: CanvasRenderingContext2D, image: CanvasImageSource, sourceWidth: number, sourceHeight: number, width: number, height: number) => {
+      const scale = Math.max(width / sourceWidth, height / sourceHeight)
+      const drawWidth = sourceWidth * scale
+      const drawHeight = sourceHeight * scale
+      const focus = window.innerHeight > window.innerWidth ? focalPoint : { x: .5, y: .5 }
+      const drawX = Math.min(0, Math.max(width - drawWidth, width / 2 - drawWidth * focus.x))
+      const drawY = Math.min(0, Math.max(height - drawHeight, height / 2 - drawHeight * focus.y))
+      context.drawImage(image, drawX, drawY, drawWidth, drawHeight)
+      return { drawX, drawY, drawWidth, drawHeight }
+    }
     const captureFirstFrame = () => {
       if (!video.videoWidth || !video.videoHeight) return
       firstFrame.width = video.videoWidth
@@ -484,26 +496,28 @@ function PixelatedVideoBackground({ source, poster, className, focalPoint }: { s
       const height = Math.max(1, Math.ceil(window.innerHeight / 5))
       const context = canvas.getContext('2d')
       if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height }
-      if (context && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth) {
+      if (context) {
         context.imageSmoothingEnabled = false
-        const scale = Math.max(width / video.videoWidth, height / video.videoHeight)
-        const drawWidth = video.videoWidth * scale
-        const drawHeight = video.videoHeight * scale
-        const focus = window.innerHeight > window.innerWidth ? focalPoint : { x: .5, y: .5 }
-        const drawX = Math.min(0, Math.max(width - drawWidth, width / 2 - drawWidth * focus.x))
-        const drawY = Math.min(0, Math.max(height - drawHeight, height / 2 - drawHeight * focus.y))
-        context.drawImage(video, drawX, drawY, drawWidth, drawHeight)
-        const seamDuration = 0.28
-        const remaining = video.duration - video.currentTime
-        if (capturedFirstFrame && Number.isFinite(remaining) && remaining > 0 && remaining < seamDuration) {
-          context.globalAlpha = 1 - remaining / seamDuration
-          context.drawImage(firstFrame, drawX, drawY, drawWidth, drawHeight)
-          context.globalAlpha = 1
+        context.clearRect(0, 0, width, height)
+        if (posterReady) drawSource(context, posterImage, posterImage.naturalWidth, posterImage.naturalHeight, width, height)
+        if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth) {
+          const { drawX, drawY, drawWidth, drawHeight } = drawSource(context, video, video.videoWidth, video.videoHeight, width, height)
+          const seamDuration = 0.28
+          const remaining = video.duration - video.currentTime
+          if (capturedFirstFrame && Number.isFinite(remaining) && remaining > 0 && remaining < seamDuration) {
+            context.globalAlpha = 1 - remaining / seamDuration
+            context.drawImage(firstFrame, drawX, drawY, drawWidth, drawHeight)
+            context.globalAlpha = 1
+          }
         }
       }
       frame = window.requestAnimationFrame(draw)
     }
     video.addEventListener('loadeddata', captureFirstFrame, { once: true })
+    if (poster) {
+      posterImage.onload = () => { posterReady = true }
+      posterImage.src = poster
+    }
     if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) captureFirstFrame()
     video.play().catch(() => undefined)
     draw()
@@ -511,7 +525,7 @@ function PixelatedVideoBackground({ source, poster, className, focalPoint }: { s
       window.cancelAnimationFrame(frame)
       video.removeEventListener('loadeddata', captureFirstFrame)
     }
-  }, [source, focalPoint.x, focalPoint.y])
+  }, [source, poster, focalPoint.x, focalPoint.y])
   const mediaType = source.endsWith('.mp4') ? 'video/mp4' : 'video/webm'
   return <><canvas ref={canvasRef} className={`pixel-canvas-bg pixel-video-bg ${className}`} aria-hidden="true" /><video ref={videoRef} className="pixel-video-source" autoPlay muted loop playsInline preload="auto" poster={poster}><source src={source} type={mediaType} /></video></>
 }
