@@ -1870,3 +1870,18 @@ M README.md
 ```text
 M src/App.tsx
 ```
+
+
+### 工作日志 2026年8月30日 20:39
+
+- 记录：V3.8 后第二轮代码优化：统一 AppState 变更入口并使用单调递增 updatedAt，Supabase app_state 行时间与 JSON 快照时间保持一致；启动、自动、手动同步统一按有效时间戳比较，避免旧云快照覆盖较新的本地数据；延迟云上传增加账号隔离和 cleanup，账号切换时不会遗留旧定时任务；首次同步纳入专业数据与主题/资料设置；首页时钟下沉到 Home，避免整个 App 每秒重渲染；Intl 格式化器复用；跨午夜新记录使用实时日期；回忆视频 metadata/seek 增加 15 秒超时和监听器清理。npm run verify 50/50、npm run build、git diff --check 均通过。
+- 记录时 HEAD：`ee3c4e6`
+- 工作区状态：
+
+```text
+M scripts/verify-final.mjs
+ M src/App.tsx
+ M src/services/cloud.ts
+ M src/services/repository.ts
+ M src/utils/recapMedia.ts
+```

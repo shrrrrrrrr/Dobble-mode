@@ -42,6 +42,13 @@ export function emptyAppState(): AppState {
   }
 }
 
+/** Advances the state version for local persistence and cloud LWW comparisons. */
+export function touchAppState(state: AppState, now = Date.now()): AppState {
+  const previous = state.updatedAt ? Date.parse(state.updatedAt) : Number.NaN
+  const next = Number.isFinite(previous) ? Math.max(now, previous + 1) : now
+  return { ...state, updatedAt: new Date(next).toISOString() }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -93,6 +100,7 @@ export function normalizeAppState(userId: string, parsed?: Partial<AppState> | n
     scoreRecords: Array.isArray(source.scoreRecords) ? source.scoreRecords.filter(isEntityWithId) : [],
     reviews: Array.isArray(source.reviews) ? source.reviews.filter(isRecord) : [],
     badges,
+    updatedAt: typeof source.updatedAt === 'string' && Number.isFinite(Date.parse(source.updatedAt)) ? source.updatedAt : undefined,
   }
 }
 
@@ -122,6 +130,7 @@ export class LocalAppRepository implements AppRepository {
   }
 
   async save(state: AppState): Promise<void> {
-    this.storage.setItem(this.key, JSON.stringify({ ...state, updatedAt: new Date().toISOString() }))
+    const persisted = state.updatedAt ? state : touchAppState(state)
+    this.storage.setItem(this.key, JSON.stringify(persisted))
   }
 }

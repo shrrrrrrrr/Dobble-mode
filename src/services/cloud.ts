@@ -59,10 +59,13 @@ export async function fetchCloudState(): Promise<CloudSnapshot | null> {
 
 export async function pushCloudState(state: unknown): Promise<CloudResult<string>> {
   if (!supabase) return { ok: false, error: '云端未配置。' }
-  const updatedAt = new Date().toISOString()
+  const stateRecord = typeof state === 'object' && state !== null && !Array.isArray(state) ? state as Record<string, unknown> : null
+  const stateTimestamp = typeof stateRecord?.updatedAt === 'string' ? Date.parse(stateRecord.updatedAt) : Number.NaN
+  const updatedAt = Number.isFinite(stateTimestamp) ? new Date(stateTimestamp).toISOString() : new Date().toISOString()
+  const synchronizedState = stateRecord ? { ...stateRecord, updatedAt } : state
   const { data, error } = await supabase
     .from('app_state')
-    .upsert({ state, updated_at: updatedAt }, { onConflict: 'user_id' })
+    .upsert({ state: synchronizedState, updated_at: updatedAt }, { onConflict: 'user_id' })
     .select('updated_at')
     .single()
   if (error) return { ok: false, error: error.message }

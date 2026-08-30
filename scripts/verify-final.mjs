@@ -103,6 +103,11 @@ for (const part of requiredRepositoryParts) {
   if (repositorySource.includes(part)) ok(`repository contains ${part}`)
   else fail(`repository contains ${part}`)
 }
+if (repositorySource.includes('export function touchAppState') && repositorySource.includes('Math.max(now, previous + 1)')) {
+  ok('state versions advance monotonically')
+} else {
+  fail('state versions advance monotonically')
+}
 
 const appSource = source(['src', 'App.tsx'])
 if (appSource.includes('repository.load()') && appSource.includes('repository.save(state)')) ok('App reads and writes through the repository')
@@ -114,6 +119,10 @@ if (cloudSource.includes('export const cloudEnabled')) ok('cloud layer is gated 
 else fail('cloud layer is gated by env config')
 if (cloudSource.includes('pushCloudState') && cloudSource.includes('fetchCloudState')) ok('cloud state push/pull implemented')
 else fail('cloud state push/pull implemented')
+if (cloudSource.includes('synchronizedState') && appSource.includes('cloudStateIsNewer')) ok('cloud row and snapshot versions stay aligned')
+else fail('cloud row and snapshot versions stay aligned')
+if (appSource.includes('activeSessionUserId') && appSource.includes('window.clearTimeout(cloudPushTimer.current)')) ok('pending cloud writes are isolated by account and cleaned up')
+else fail('pending cloud writes are isolated by account and cleaned up')
 if (existsSync(join(root, 'supabase', 'migrations', '0002_cloud_state.sql'))) ok('cloud state migration SQL exists')
 else fail('cloud state migration SQL exists')
 const migrationSource = source(['supabase', 'migrations', '0002_cloud_state.sql'])
@@ -132,6 +141,8 @@ else fail('old local accounts require verification before migration')
 const recapMediaSource = source(['src', 'utils', 'recapMedia.ts'])
 if (recapMediaSource.includes('VIDEO_FRACTIONS') && recapMediaSource.includes('frameSignal') && recapMediaSource.includes('differentEnough')) ok('recap video uses multi-point quality-screened sampling')
 else fail('recap video uses multi-point quality-screened sampling')
+if (recapMediaSource.includes('MEDIA_WAIT_TIMEOUT_MS') && recapMediaSource.includes('window.clearTimeout(timer)')) ok('recap media waits have timeout cleanup')
+else fail('recap media waits have timeout cleanup')
 if (existsSync(join(root, 'src', 'data', 'recapTemplates.ts')) && existsSync(join(root, 'docs', 'RECAP_TEMPLATE_DESIGN.md'))) ok('recap copy and design guide are editable')
 else fail('recap copy and design guide are editable')
 

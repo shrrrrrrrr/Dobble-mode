@@ -6,7 +6,7 @@ import { recapCopy } from './data/recapTemplates'
 import { buildCalendarArt } from './utils/calendarArt'
 import { type AppSession, getLocalAccountCandidates, verifyLocalAccount } from './services/auth'
 import { importLegacyV1Data, markLegacyDismissed, markLegacyImported, shouldOfferLegacyImport } from './services/legacyImport'
-import { emptyAppState, LocalAppRepository, normalizeAppState, type AppState } from './services/repository'
+import { emptyAppState, LocalAppRepository, normalizeAppState, touchAppState, type AppState } from './services/repository'
 import { cloudEnabled, cloudSignIn, cloudSignOut, cloudSignUp, fetchCloudState, getCloudAccount, getPrimarySession, onPrimaryAuthStateChange, pushCloudState, type CloudAccount } from './services/cloud'
 import { badgeRules, evaluateBadges } from './services/badges'
 import { seasonPacks, themePacks, type SeasonId, type ThemeId } from './theme'
@@ -26,7 +26,9 @@ function storageErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : '保存失败，请稍后再试。'
 }
 
-const number = (value: number) => new Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 1 }).format(value)
+const compactNumberFormatter = new Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 1 })
+const clockFormatter = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+const number = (value: number) => compactNumberFormatter.format(value)
 
 function localDateString(date: Date) {
   const year = date.getFullYear()
@@ -47,9 +49,18 @@ function isInRecentSevenDays(date: string, window = getRecentSevenDays()) {
   return date >= window.start && date <= window.end
 }
 
-const today = localDateString(new Date())
 function formatClock(date: Date) {
-  return new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(date)
+  return clockFormatter.format(date)
+}
+
+function normalizeCloudState(userId: string, snapshot: { state: unknown; updatedAt: string }) {
+  return { ...normalizeAppState(userId, snapshot.state as Partial<AppState>), updatedAt: snapshot.updatedAt }
+}
+
+function cloudStateIsNewer(snapshot: { updatedAt: string }, state: AppState) {
+  const remoteTime = Date.parse(snapshot.updatedAt)
+  const localTime = state.updatedAt ? Date.parse(state.updatedAt) : Number.NaN
+  return Number.isFinite(remoteTime) && (!Number.isFinite(localTime) || remoteTime > localTime)
 }
 
 function formatPostTime(value: string) {
@@ -66,7 +77,6 @@ export default function App() {
   const [stateUserId, setStateUserId] = useState<string | null>(null)
   const [session, setSession] = useState<AppSession | null>(null)
   const [sessionReady, setSessionReady] = useState(false)
-  const [clock, setClock] = useState(() => new Date())
   const [season, setSeason] = useState<SeasonId>('autumn')
   const repository = useMemo(() => session ? new LocalAppRepository(session.userId) : null, [session?.userId])
   const [tab, setTab] = useState<Tab>('home')
@@ -92,8 +102,17 @@ export default function App() {
   const [cloudBusy, setCloudBusy] = useState(false)
   const [cloudSyncedAt, setCloudSyncedAt] = useState('')
   const cloudPushTimer = useRef<number | null>(null)
+  const activeSessionUserId = useRef<string | null>(session?.userId ?? null)
+  activeSessionUserId.current = session?.userId ?? null
   const companionRef = useRef<HTMLButtonElement | null>(null)
   const assistantPanelRef = useRef<HTMLDivElement | null>(null)
+
+  function updateState(updater: (current: AppState) => AppState) {
+    setState(current => {
+      const next = updater(current)
+      return next === current ? current : touchAppState(next)
+    })
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -110,13 +129,11 @@ export default function App() {
       let nextState = await repository.load()
       if (cloudEnabled) {
         const snapshot = await fetchCloudState()
-        if (snapshot) {
-          const cloudState = normalizeAppState(session.userId, snapshot.state as Partial<AppState>)
-          if (hasSavedContent(cloudState)) {
-            nextState = cloudState
-            await repository.save(nextState)
-            setCloudSyncedAt(new Date().toLocaleString('zh-CN'))
-          }
+        if (snapshot && cloudStateIsNewer(snapshot, nextState)) {
+          const cloudState = normalizeCloudState(session.userId, snapshot)
+          nextState = cloudState
+          await repository.save(nextState)
+          setCloudSyncedAt(new Date().toLocaleString('zh-CN'))
         }
       }
       if (cancelled) return
@@ -144,16 +161,24 @@ export default function App() {
     repository.save(state).then(() => setNotice('')).catch(error => setNotice(storageErrorMessage(error)))
     if (cloudEnabled && cloudAccount) {
       if (cloudPushTimer.current) window.clearTimeout(cloudPushTimer.current)
+      const scheduledUserId = session.userId
       cloudPushTimer.current = window.setTimeout(() => {
+        cloudPushTimer.current = null
+        if (activeSessionUserId.current !== scheduledUserId) return
         pushCloudState(state).then(result => {
           if (result.ok) setCloudSyncedAt(new Date().toLocaleTimeString('zh-CN'))
         })
       }, 2000)
     }
-  }, [repository, session, state, stateUserId])
+    return () => {
+      if (cloudPushTimer.current) {
+        window.clearTimeout(cloudPushTimer.current)
+        cloudPushTimer.current = null
+      }
+    }
+  }, [repository, session, state, stateUserId, migrationReady, cloudAccount?.email])
   useEffect(() => { document.body.dataset.theme = state.theme }, [state.theme])
   useEffect(() => { document.body.dataset.mode = state.mode }, [state.mode])
-  useEffect(() => { const timer = window.setInterval(() => setClock(new Date()), 1000); return () => window.clearInterval(timer) }, [])
   useEffect(() => {
     if (!cloudEnabled) { setSession(null); setSessionReady(true); return }
     let active = true
@@ -171,7 +196,9 @@ export default function App() {
   }, [assistantPinned])
   useEffect(() => {
     if (!cloudEnabled) return
-    getCloudAccount().then(account => setCloudAccount(account))
+    let cancelled = false
+    getCloudAccount().then(account => { if (!cancelled) setCloudAccount(account) })
+    return () => { cancelled = true }
   }, [session?.userId])
 
   useEffect(() => {
@@ -182,15 +209,15 @@ export default function App() {
       try {
         const snap = await fetchCloudState()
         if (cancelled) return
-        const localAt = state.updatedAt ?? ''
-        if (snap && snap.updatedAt > localAt) {
-          const next = normalizeAppState(session.userId, snap.state as Partial<AppState>)
+        if (snap && cloudStateIsNewer(snap, state)) {
+          const next = normalizeCloudState(session.userId, snap)
           setState(next)
           await repository.save(next)
           setCloudSyncedAt(new Date().toLocaleString('zh-CN'))
           setCloudMessage('已从云端同步最新数据。')
-        } else if (!snap || state.works.length + state.feedback.length + state.posts.length > 0) {
-          await pushCloudState(state)
+        } else if (!snap || hasSavedContent(state)) {
+          const result = await pushCloudState(state)
+          if (!result.ok) throw new Error(result.error)
           setCloudSyncedAt(new Date().toLocaleString('zh-CN'))
           setCloudMessage('本地数据已同步到云端。')
         }
@@ -209,9 +236,9 @@ export default function App() {
     setCloudMessage('')
     try {
       const snap = await fetchCloudState()
-      if (snap && snap.updatedAt > (state.updatedAt ?? '')) {
+      if (snap && cloudStateIsNewer(snap, state)) {
         if (session) {
-          const next = normalizeAppState(session.userId, snap.state as Partial<AppState>)
+          const next = normalizeCloudState(session.userId, snap)
           setState(next)
           if (repository) await repository.save(next)
         }
@@ -233,7 +260,7 @@ export default function App() {
     if (!session || stateUserId !== session.userId) return
     const next = evaluateBadges(state)
     if (Object.keys(next).length !== Object.keys(state.badges).length) {
-      setState(current => ({ ...current, badges: next }))
+      updateState(current => ({ ...current, badges: next }))
     }
   }, [state, stateUserId, session])
 
@@ -257,7 +284,7 @@ export default function App() {
 
   function changeTheme(nextTheme: ThemeId) {
     const pack = themePacks.find(item => item.id === nextTheme)
-    if (pack?.available) setState(current => ({
+    if (pack?.available) updateState(current => ({
       ...current,
       theme: nextTheme,
       themeByMode: { ...current.themeByMode, [current.mode]: nextTheme },
@@ -265,7 +292,7 @@ export default function App() {
   }
 
   function switchMode(nextMode: 'life' | 'professional') {
-    setState(current => ({ ...current, mode: nextMode, theme: current.themeByMode[nextMode] }))
+    updateState(current => ({ ...current, mode: nextMode, theme: current.themeByMode[nextMode] }))
     setSelectedWork(null)
     setSelectedRecap(false)
     setAssistantPinned(false)
@@ -273,7 +300,7 @@ export default function App() {
   }
 
   function openMyProfile() {
-    setState(current => current.mode === 'life' ? current : ({ ...current, mode: 'life', theme: current.themeByMode.life }))
+    updateState(current => current.mode === 'life' ? current : ({ ...current, mode: 'life', theme: current.themeByMode.life }))
     setTab('community')
     setCommunityView('profile')
     setSelectedWork(null)
@@ -296,7 +323,7 @@ export default function App() {
         comments: Number(form.get('comments')) || 0, favorites: Number(form.get('favorites')) || 0,
         shares: Number(form.get('shares')) || 0, note: String(form.get('note')).trim(), mood: form.get('mood') as Work['mood'], coverImage, recapMedia,
       }
-      setState((current: typeof state) => ({ ...current, works: [newWork, ...current.works] }))
+      updateState(current => ({ ...current, works: [newWork, ...current.works] }))
       setShowWorkForm(false)
       setNotice('')
     } catch (error) {
@@ -313,7 +340,7 @@ export default function App() {
       const imageFile = form.get('image')
       const image = imageFile instanceof File && imageFile.size > 0 ? await compressImage(imageFile) : undefined
       const post: Post = { id: crypto.randomUUID(), userId: session?.userId, author: state.profile.nickname, avatar: state.profile.avatarLabel, content, image, imageCaption: String(form.get('imageCaption')).trim() || undefined, createdAt: new Date().toISOString(), likes: 0, liked: false, comments: [] }
-      setState((current: typeof state) => ({ ...current, posts: [post, ...current.posts] }))
+      updateState(current => ({ ...current, posts: [post, ...current.posts] }))
       setShowPostForm(false)
       setNotice('')
     } catch (error) {
@@ -329,7 +356,7 @@ export default function App() {
       const avatarFile = form.get('avatarImage')
       const avatarImage = avatarFile instanceof File && avatarFile.size > 0 ? await compressImage(avatarFile, 480, 0.88) : state.profile.avatarImage
       const profile: UserProfile = { nickname, avatarLabel: nickname.slice(0, 1), avatarImage }
-      setState((current: typeof state) => ({ ...current, profile }))
+      updateState(current => ({ ...current, profile }))
       setShowProfileForm(false)
       setNotice('')
     } catch (error) {
@@ -338,7 +365,7 @@ export default function App() {
   }
 
   function updateNote(workId: string, note: string) {
-    setState((current: typeof state) => ({ ...current, works: current.works.map((work: Work) => work.id === workId ? { ...work, note } : work) }))
+    updateState(current => ({ ...current, works: current.works.map((work: Work) => work.id === workId ? { ...work, note } : work) }))
   }
 
   function saveFeedback(event: FormEvent<HTMLFormElement>) {
@@ -347,19 +374,19 @@ export default function App() {
     const form = new FormData(event.currentTarget)
     const content = String(form.get('content')).trim()
     if (!content) return
-    const feedback: FeedbackEvent = { id: crypto.randomUUID(), workId: feedbackWorkId, type: form.get('type') as FeedbackEvent['type'], content, createdAt: today }
-    setState((current: typeof state) => ({ ...current, feedback: [feedback, ...current.feedback] }))
+    const feedback: FeedbackEvent = { id: crypto.randomUUID(), workId: feedbackWorkId, type: form.get('type') as FeedbackEvent['type'], content, createdAt: localDateString(new Date()) }
+    updateState(current => ({ ...current, feedback: [feedback, ...current.feedback] }))
     setFeedbackWorkId(null)
     setNotice('')
   }
 
   function toggleLike(postId: string) {
-    setState((current: typeof state) => ({ ...current, posts: current.posts.map((post: Post) => post.id === postId ? { ...post, liked: !post.liked, likes: post.likes + (post.liked ? -1 : 1) } : post) }))
+    updateState(current => ({ ...current, posts: current.posts.map((post: Post) => post.id === postId ? { ...post, liked: !post.liked, likes: post.likes + (post.liked ? -1 : 1) } : post) }))
   }
 
   function addComment(postId: string, comment: string) {
     if (!comment) return
-    setState((current: typeof state) => ({ ...current, posts: current.posts.map((post: Post) => post.id === postId ? { ...post, comments: [...post.comments, comment] } : post) }))
+    updateState(current => ({ ...current, posts: current.posts.map((post: Post) => post.id === postId ? { ...post, comments: [...post.comments, comment] } : post) }))
   }
 
   function askAssistant(event: FormEvent) {
@@ -388,7 +415,7 @@ export default function App() {
       setLegacyImportOpen(false)
       return
     }
-    setState(normalizeAppState(session.userId, legacy))
+    updateState(() => normalizeAppState(session.userId, legacy))
     markLegacyImported(session.userId)
     setLegacyImportOpen(false)
   }
@@ -412,8 +439,8 @@ export default function App() {
       <header className="topbar"><button className="brand tile-interactive" onClick={() => { if (state.mode === 'professional') { setProTab('topics') } else { setTab('home'); setCommunityView('feed') } setAssistantPinned(false) }} aria-label="留白，返回首页">留白</button><button className={`mode-switch ${state.mode}`} role="switch" aria-checked={state.mode === 'professional'} aria-label={`切换到${state.mode === 'life' ? '专业' : '生活'}模式`} onClick={() => switchMode(state.mode === 'life' ? 'professional' : 'life')}><span className="mode-window" aria-hidden="true"><span className="mode-life-scene"><span className="cornflower">✿</span><i>♫</i><b>♪</b><em /></span><span className="mode-night-scene"><span className="mode-stars"><i>✦</i><i>·</i><i>✧</i></span><img src="/assets/mode/professional-lamp.png" alt="" /></span></span><span className="mode-label">{state.mode === 'life' ? '生活' : '专业'}</span></button><div className="theme-switcher" aria-label="主题选择"><button className={`theme-dot ${theme === 'mint' ? 'active' : ''}`} onClick={() => { changeTheme('mint'); setAssistantPinned(false) }} title="默认主题" aria-label="默认主题" /><button className={`theme-dot cream ${theme === 'cream' ? 'active' : ''}`} onClick={() => { changeTheme('cream'); setAssistantPinned(false) }} title="北航四季" aria-label="北航四季" /><button className={`theme-dot night ${theme === 'night' ? 'active' : ''}`} onClick={() => { changeTheme('night'); setAssistantPinned(false) }} title="樱花夜" aria-label="樱花夜" /></div>{theme === 'cream' && <div className="season-switcher" aria-label="北航四季选择">{seasonPacks.map(pack => <button key={pack.id} className={season === pack.id ? 'active' : ''} onClick={() => { setSeason(pack.id); setAssistantPinned(false) }} style={{ '--season-accent': pack.accent } as React.CSSProperties}>{pack.name.split(' · ')[0]}</button>)}</div>}<div className="account-summary"><button className="account-profile" onClick={openMyProfile} aria-label="打开我的主页"><span>{session.username}</span><i aria-hidden="true">我</i></button><button className="sign-out" onClick={() => { handleSignOut(); setAssistantPinned(false) }}>退出</button></div></header>
       <div className="content" onClick={event => { if (assistantPinned && event.target === event.currentTarget) setAssistantPinned(false) }}>
         {notice && <div className="app-notice" role="alert"><span>{notice}</span><button onClick={() => setNotice('')} aria-label="关闭提示">关闭</button></div>}
-        {state.mode === 'professional' ? <ProfessionalMode tab={proTab} works={state.works} topics={state.topics} templates={state.scoreTemplates} records={state.scoreRecords} reviews={state.reviews} onTopicsChange={topics => setState(current => ({ ...current, topics }))} onTemplatesChange={scoreTemplates => setState(current => ({ ...current, scoreTemplates }))} onRecordsChange={scoreRecords => setState(current => ({ ...current, scoreRecords }))} onReviewsChange={reviews => setState(current => ({ ...current, reviews }))} /> : selectedRecap ? <WeeklyRecap works={recentWorks} feedback={recentFeedback} onClose={() => setSelectedRecap(false)} /> : selectedWork ? <WorkDetail work={selectedWork} feedback={state.feedback.filter((item: FeedbackEvent) => item.workId === selectedWork.id)} onClose={() => setSelectedWork(null)} onSaveNote={updateNote} onFeedback={() => setFeedbackWorkId(selectedWork.id)} /> : <>
-          {tab === 'home' && <Home works={recentWorks} feedback={recentFeedback} clockText={formatClock(clock)} clock={clock} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} onNavigate={nextTab => { setTab(nextTab); if (nextTab === 'community') setCommunityView('feed') }} />}
+        {state.mode === 'professional' ? <ProfessionalMode tab={proTab} works={state.works} topics={state.topics} templates={state.scoreTemplates} records={state.scoreRecords} reviews={state.reviews} onTopicsChange={topics => updateState(current => ({ ...current, topics }))} onTemplatesChange={scoreTemplates => updateState(current => ({ ...current, scoreTemplates }))} onRecordsChange={scoreRecords => updateState(current => ({ ...current, scoreRecords }))} onReviewsChange={reviews => updateState(current => ({ ...current, reviews }))} /> : selectedRecap ? <WeeklyRecap works={recentWorks} feedback={recentFeedback} onClose={() => setSelectedRecap(false)} /> : selectedWork ? <WorkDetail work={selectedWork} feedback={state.feedback.filter((item: FeedbackEvent) => item.workId === selectedWork.id)} onClose={() => setSelectedWork(null)} onSaveNote={updateNote} onFeedback={() => setFeedbackWorkId(selectedWork.id)} /> : <>
+          {tab === 'home' && <Home works={recentWorks} feedback={recentFeedback} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} onNavigate={nextTab => { setTab(nextTab); if (nextTab === 'community') setCommunityView('feed') }} />}
           {tab === 'works' && <Works works={state.works} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} />}
           {tab === 'memories' && <Memories memories={memories} works={recentWorks} onOpenRecap={() => setSelectedRecap(true)} />}
           {tab === 'community' && <Community userId={session.userId} view={communityView} profile={state.profile} posts={state.posts} onAdd={() => setShowPostForm(true)} onLike={toggleLike} onComment={addComment} onViewChange={setCommunityView} onEditProfile={() => setShowProfileForm(true)} badgeWall={<BadgeWall badges={state.badges} state={state} />} cloudPanel={<CloudSyncPanel account={cloudAccount} busy={cloudBusy} message={cloudMessage} syncedAt={cloudSyncedAt} onSignOut={handleSignOut} onSyncNow={syncCloudNow} />} />}
@@ -432,7 +459,7 @@ export default function App() {
     {localMigrationOpen && <Modal title="迁移旧本地账号" onClose={() => { setLocalMigrationOpen(false); setMigrationReady(true) }}><LocalDataMigration candidates={localMigrationCandidates} onMigrate={async (username, password) => {
       const legacySession = await verifyLocalAccount(username, password)
       const legacyState = await new LocalAppRepository(legacySession.userId).load()
-      const migrated = normalizeAppState(session!.userId, legacyState)
+      const migrated = touchAppState(normalizeAppState(session!.userId, legacyState))
       setState(migrated)
       if (repository) await repository.save(migrated)
       const result = await pushCloudState(migrated)
@@ -640,8 +667,14 @@ function useCalendarArt(date: Date) {
   return art
 }
 
-function Home({ works, feedback, clockText, clock, onAdd, onOpenWork, onNavigate }: { works: Work[]; feedback: FeedbackEvent[]; clockText: string; clock: Date; onAdd: () => void; onOpenWork: (work: Work) => void; onNavigate: (tab: Tab) => void }) {
-  const now = new Date()
+function Home({ works, feedback, onAdd, onOpenWork, onNavigate }: { works: Work[]; feedback: FeedbackEvent[]; onAdd: () => void; onOpenWork: (work: Work) => void; onNavigate: (tab: Tab) => void }) {
+  const [clock, setClock] = useState(() => new Date())
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(new Date()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+  const now = clock
+  const clockText = formatClock(clock)
   const calendarLabel = `${clock.getMonth() + 1} 月 ${clock.getDate()} 日`
   const hourAngle = (now.getHours() % 12) * 30 + now.getMinutes() * 0.5
   const minuteAngle = now.getMinutes() * 6 + now.getSeconds() * 0.1
@@ -706,7 +739,7 @@ function Community({ userId, view, profile, posts, onAdd, onLike, onComment, onV
   return <><section className="page-head community-head"><p className="eyebrow">创作者社区</p><h1>说说你正在<br />经历的创作。</h1><div className="community-actions"><button className="profile-nav-button" onClick={() => onViewChange('profile')}>我的</button><button className="primary compact" onClick={onAdd}>发布</button></div></section><div className="post-list">{posts.map(post => { const isMine = post.userId === userId; const author = isMine ? profile.nickname : post.author; const avatar = isMine ? profile.avatarLabel : post.avatar; return <article className="post" key={post.id}><div className="post-author"><span className="avatar">{avatar}</span><div><strong>{author}</strong><small>{formatPostTime(post.createdAt)}</small></div></div><p className="post-content">{post.content}</p>{post.image && <img className="post-image" src={post.image} alt={post.imageCaption || '社区图片'} />}{!post.image && post.imageCaption && <div className="post-image">{post.imageCaption}</div>}<div className="post-actions"><button className={post.liked ? 'liked' : ''} onClick={() => onLike(post.id)}>喜欢 {post.likes}</button><button onClick={() => setReplyingTo(replyingTo === post.id ? null : post.id)}>回应 {post.comments.length}</button></div>{replyingTo === post.id && <form className="reply-form" onSubmit={event => { event.preventDefault(); onComment(post.id, draft.trim()); setDraft(''); setReplyingTo(null) }}><input value={draft} onChange={event => setDraft(event.target.value)} placeholder="写下你的回应" autoFocus /><button disabled={!draft.trim()}>发送</button></form>}{post.comments.slice(-2).map((comment, index) => <p className="comment" key={index}>{comment}</p>)}</article> })}</div></>
 }
 
-function WorkForm({ onSave }: { onSave: (event: FormEvent<HTMLFormElement>) => void | Promise<void> }) { return <form className="entry-form" onSubmit={onSave}><label>标题<input name="title" required placeholder="这条作品叫什么？" /></label><div className="two-columns"><label>平台<select name="platform" defaultValue="小红书"><option>抖音</option><option>小红书</option><option>B站</option><option>视频号</option></select></label><label>发布时间<input name="publishedAt" type="date" defaultValue={today} /></label></div><div className="two-columns"><label>观看/阅读<input name="plays" type="number" min="0" placeholder="0" /></label><label>点赞<input name="likes" type="number" min="0" placeholder="0" /></label></div><div className="two-columns"><label>评论<input name="comments" type="number" min="0" placeholder="0" /></label><label>收藏<input name="favorites" type="number" min="0" placeholder="0" /></label></div><label>分享<input name="shares" type="number" min="0" placeholder="0" /></label><label>封面印象<input name="cover" placeholder="例如：窗边、晚餐、街道" /></label><label>上传封面<input name="coverImage" type="file" accept="image/*" /></label><label>回忆画面（图片或视频，可多选）<input name="recapMedia" type="file" accept="image/*,video/*" multiple /></label><p className="form-hint">视频会从多个中段时间点采样，自动跳过过暗、低信息和相似画面，只保存用于回忆的压缩截图。</p><label>此刻的感受<select name="mood" defaultValue="平静"><option>雀跃</option><option>平静</option><option>疲惫</option><option>骄傲</option></select></label><label>作品便签<textarea name="note" placeholder="不必写得漂亮，留下当时的自己就好。" /></label><button className="primary" type="submit">保存作品</button></form> }
+function WorkForm({ onSave }: { onSave: (event: FormEvent<HTMLFormElement>) => void | Promise<void> }) { return <form className="entry-form" onSubmit={onSave}><label>标题<input name="title" required placeholder="这条作品叫什么？" /></label><div className="two-columns"><label>平台<select name="platform" defaultValue="小红书"><option>抖音</option><option>小红书</option><option>B站</option><option>视频号</option></select></label><label>发布时间<input name="publishedAt" type="date" defaultValue={localDateString(new Date())} /></label></div><div className="two-columns"><label>观看/阅读<input name="plays" type="number" min="0" placeholder="0" /></label><label>点赞<input name="likes" type="number" min="0" placeholder="0" /></label></div><div className="two-columns"><label>评论<input name="comments" type="number" min="0" placeholder="0" /></label><label>收藏<input name="favorites" type="number" min="0" placeholder="0" /></label></div><label>分享<input name="shares" type="number" min="0" placeholder="0" /></label><label>封面印象<input name="cover" placeholder="例如：窗边、晚餐、街道" /></label><label>上传封面<input name="coverImage" type="file" accept="image/*" /></label><label>回忆画面（图片或视频，可多选）<input name="recapMedia" type="file" accept="image/*,video/*" multiple /></label><p className="form-hint">视频会从多个中段时间点采样，自动跳过过暗、低信息和相似画面，只保存用于回忆的压缩截图。</p><label>此刻的感受<select name="mood" defaultValue="平静"><option>雀跃</option><option>平静</option><option>疲惫</option><option>骄傲</option></select></label><label>作品便签<textarea name="note" placeholder="不必写得漂亮，留下当时的自己就好。" /></label><button className="primary" type="submit">保存作品</button></form> }
 
 function PostForm({ onSave }: { onSave: (event: FormEvent<HTMLFormElement>) => void | Promise<void> }) { return <form className="entry-form" onSubmit={onSave}><label>想说的话<textarea name="content" required placeholder="只支持普通文字。" /></label><label>上传图片<input name="image" type="file" accept="image/*" /></label><label>图片说明<input name="imageCaption" placeholder="例如：我的工作台" /></label><button className="primary" type="submit">发布</button></form> }
 

@@ -4,25 +4,43 @@ import type { RecapMediaFrame } from '../types'
 const MAX_MEDIA_FILES = 6
 const MAX_VIDEO_BYTES = 100 * 1024 * 1024
 const VIDEO_FRACTIONS = [.14, .28, .43, .58, .72, .86]
+const MEDIA_WAIT_TIMEOUT_MS = 15_000
 
 function waitFor(target: EventTarget, event: string) {
   return new Promise<void>((resolve, reject) => {
+    let timer = 0
     const done = () => { cleanup(); resolve() }
     const failed = () => { cleanup(); reject(new Error('媒体读取失败，请换一个文件重试。')) }
-    const cleanup = () => { target.removeEventListener(event, done); target.removeEventListener('error', failed) }
+    const cleanup = () => {
+      window.clearTimeout(timer)
+      target.removeEventListener(event, done)
+      target.removeEventListener('error', failed)
+    }
     target.addEventListener(event, done, { once: true })
     target.addEventListener('error', failed, { once: true })
+    timer = window.setTimeout(failed, MEDIA_WAIT_TIMEOUT_MS)
   })
 }
 
 function seek(video: HTMLVideoElement, time: number) {
   return new Promise<void>((resolve, reject) => {
+    let timer = 0
     const done = () => { cleanup(); resolve() }
     const failed = () => { cleanup(); reject(new Error('视频定位失败。')) }
-    const cleanup = () => { video.removeEventListener('seeked', done); video.removeEventListener('error', failed) }
+    const cleanup = () => {
+      window.clearTimeout(timer)
+      video.removeEventListener('seeked', done)
+      video.removeEventListener('error', failed)
+    }
     video.addEventListener('seeked', done, { once: true })
     video.addEventListener('error', failed, { once: true })
-    video.currentTime = time
+    timer = window.setTimeout(failed, MEDIA_WAIT_TIMEOUT_MS)
+    try {
+      video.currentTime = time
+    } catch (error) {
+      cleanup()
+      reject(error)
+    }
   })
 }
 
