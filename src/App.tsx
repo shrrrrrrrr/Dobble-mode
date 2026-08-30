@@ -40,11 +40,6 @@ function isInRecentSevenDays(date: string, window = getRecentSevenDays()) {
 }
 
 const today = localDateString(new Date())
-const todayLabel = (() => {
-  const date = new Date()
-  const weekdays = ['日', '一', '二', '三', '四', '五', '六']
-  return `${date.getMonth() + 1} 月 ${date.getDate()} 日，星期${weekdays[date.getDay()]}`
-})()
 function formatClock(date: Date) {
   return new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(date)
 }
@@ -373,8 +368,8 @@ export default function App() {
       <header className="topbar"><button className="brand tile-interactive" onClick={() => { if (state.mode === 'professional') { setProTab('topics') } else { setTab('home'); setCommunityView('feed') } setAssistantPinned(false) }} aria-label="留白，返回首页">留白</button><button className={`mode-switch ${state.mode}`} role="switch" aria-checked={state.mode === 'professional'} aria-label={`切换到${state.mode === 'life' ? '专业' : '生活'}模式`} onClick={() => switchMode(state.mode === 'life' ? 'professional' : 'life')}><span className="mode-window" aria-hidden="true"><span className="mode-life-scene"><span className="cornflower">✿</span><i>♫</i><b>♪</b><em /></span><span className="mode-night-scene"><span className="mode-stars"><i>✦</i><i>·</i><i>✧</i></span><img src="/assets/mode/professional-lamp.png" alt="" /></span></span><span className="mode-label">{state.mode === 'life' ? '生活' : '专业'}</span></button><div className="theme-switcher" aria-label="主题选择"><button className={`theme-dot ${theme === 'mint' ? 'active' : ''}`} onClick={() => { changeTheme('mint'); setAssistantPinned(false) }} title="默认主题" aria-label="默认主题" /><button className={`theme-dot cream ${theme === 'cream' ? 'active' : ''}`} onClick={() => { changeTheme('cream'); setAssistantPinned(false) }} title="北航四季" aria-label="北航四季" /><button className={`theme-dot night ${theme === 'night' ? 'active' : ''}`} onClick={() => { changeTheme('night'); setAssistantPinned(false) }} title="樱花夜" aria-label="樱花夜" /></div>{theme === 'cream' && <div className="season-switcher" aria-label="北航四季选择">{seasonPacks.map(pack => <button key={pack.id} className={season === pack.id ? 'active' : ''} onClick={() => { setSeason(pack.id); setAssistantPinned(false) }} style={{ '--season-accent': pack.accent } as React.CSSProperties}>{pack.name.split(' · ')[0]}</button>)}</div>}<div className="account-summary"><button className="account-profile" onClick={openMyProfile} aria-label="打开我的主页"><span>{session.username}</span><i aria-hidden="true">我</i></button><button className="sign-out" onClick={() => { handleSignOut(); setAssistantPinned(false) }}>退出</button></div></header>
       <div className="content" onClick={event => { if (assistantPinned && event.target === event.currentTarget) setAssistantPinned(false) }}>
         {notice && <div className="app-notice" role="alert"><span>{notice}</span><button onClick={() => setNotice('')} aria-label="关闭提示">关闭</button></div>}
-        {state.mode === 'professional' ? <ProfessionalMode tab={proTab} onTabChange={setProTab} works={state.works} topics={state.topics} templates={state.scoreTemplates} records={state.scoreRecords} reviews={state.reviews} onTopicsChange={topics => setState(current => ({ ...current, topics }))} onTemplatesChange={scoreTemplates => setState(current => ({ ...current, scoreTemplates }))} onRecordsChange={scoreRecords => setState(current => ({ ...current, scoreRecords }))} onReviewsChange={reviews => setState(current => ({ ...current, reviews }))} /> : selectedRecap ? <WeeklyRecap works={recentWorks} feedback={recentFeedback} onClose={() => setSelectedRecap(false)} /> : selectedWork ? <WorkDetail work={selectedWork} feedback={state.feedback.filter((item: FeedbackEvent) => item.workId === selectedWork.id)} onClose={() => setSelectedWork(null)} onSaveNote={updateNote} onFeedback={() => setFeedbackWorkId(selectedWork.id)} /> : <>
-          {tab === 'home' && <Home works={recentWorks} feedback={recentFeedback} dateLabel={todayLabel} clockText={formatClock(clock)} clock={clock} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} onNavigate={nextTab => { setTab(nextTab); if (nextTab === 'community') setCommunityView('feed') }} />}
+        {state.mode === 'professional' ? <ProfessionalMode tab={proTab} works={state.works} topics={state.topics} templates={state.scoreTemplates} records={state.scoreRecords} reviews={state.reviews} onTopicsChange={topics => setState(current => ({ ...current, topics }))} onTemplatesChange={scoreTemplates => setState(current => ({ ...current, scoreTemplates }))} onRecordsChange={scoreRecords => setState(current => ({ ...current, scoreRecords }))} onReviewsChange={reviews => setState(current => ({ ...current, reviews }))} /> : selectedRecap ? <WeeklyRecap works={recentWorks} feedback={recentFeedback} onClose={() => setSelectedRecap(false)} /> : selectedWork ? <WorkDetail work={selectedWork} feedback={state.feedback.filter((item: FeedbackEvent) => item.workId === selectedWork.id)} onClose={() => setSelectedWork(null)} onSaveNote={updateNote} onFeedback={() => setFeedbackWorkId(selectedWork.id)} /> : <>
+          {tab === 'home' && <Home works={recentWorks} feedback={recentFeedback} clockText={formatClock(clock)} clock={clock} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} onNavigate={nextTab => { setTab(nextTab); if (nextTab === 'community') setCommunityView('feed') }} />}
           {tab === 'works' && <Works works={state.works} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} />}
           {tab === 'memories' && <Memories memories={memories} works={recentWorks} onOpenRecap={() => setSelectedRecap(true)} />}
           {tab === 'community' && <Community userId={session.userId} view={communityView} profile={state.profile} posts={state.posts} onAdd={() => setShowPostForm(true)} onLike={toggleLike} onComment={addComment} onViewChange={setCommunityView} onEditProfile={() => setShowProfileForm(true)} badgeWall={<BadgeWall badges={state.badges} state={state} />} cloudPanel={<CloudSyncPanel account={cloudAccount} busy={cloudBusy} message={cloudMessage} syncedAt={cloudSyncedAt} onSignIn={async (email, password) => { const result = await cloudSignIn(email, password); if (result.ok) { setCloudAccount(result.data); setCloudMessage('') } return result.ok ? null : result.error }} onSignUp={async (email, password) => { const result = await cloudSignUp(email, password); if (result.ok) { setCloudAccount(result.data); setCloudMessage('') } return result.ok ? null : result.error }} onSignOut={handleCloudSignOut} onSyncNow={syncCloudNow} />} />}
@@ -394,12 +389,43 @@ export default function App() {
   </main>
 }
 
-function PixelBackground({ theme, season }: { theme: ThemeId; season: SeasonId }) {
-  if (theme === 'cream') return <PixelatedImageBackground source={seasonPacks.find(item => item.id === season)?.image ?? ''} pixelSize={3} className={`season-background season-${season}`} />
-  if (theme === 'night') return <PixelatedImageBackground source="/assets/sakura/background.jpg" pixelSize={5} className="sakura-background" />
+type Background = { key: string; kind: 'image' | 'video'; source: string; poster?: string; pixelSize?: number; className: string }
+
+function backgroundFor(theme: ThemeId, season: SeasonId): Background | null {
+  if (theme === 'cream') {
+    const pack = seasonPacks.find(item => item.id === season)
+    return { key: `cream-${season}`, kind: 'image', source: pack?.image ?? '', pixelSize: 5, className: `season-background season-${season}` }
+  }
+  if (theme === 'night') return { key: 'night', kind: 'image', source: '/assets/sakura/background.jpg', pixelSize: 5, className: 'sakura-background' }
   const pack = themePacks.find(item => item.id === theme && item.available) ?? themePacks[0]
-  if (!pack.backgroundVideo) return null
-  return <PixelatedVideoBackground source={pack.backgroundVideo} poster={pack.poster} />
+  return pack.backgroundVideo ? { key: `video-${theme}`, kind: 'video', source: pack.backgroundVideo, poster: pack.poster, className: 'pixel-video-theme' } : null
+}
+
+function PixelBackground({ theme, season }: { theme: ThemeId; season: SeasonId }) {
+  const current = backgroundFor(theme, season)
+  const [previous, setPrevious] = useState<Background | null>(null)
+  const currentKey = current?.key ?? ''
+  const currentBackgroundRef = useRef<Background | null>(current)
+
+  useEffect(() => {
+    if (currentBackgroundRef.current?.key === currentKey) return
+    setPrevious(currentBackgroundRef.current)
+    currentBackgroundRef.current = current
+    const timeout = window.setTimeout(() => setPrevious(null), 900)
+    return () => window.clearTimeout(timeout)
+  }, [current, currentKey])
+
+  return <div className="theme-background-stage" aria-hidden="true">
+    {previous && <BackgroundLayer background={previous} phase="leaving" />}
+    {current && <BackgroundLayer key={current.key} background={current} phase={previous ? 'entering' : 'resting'} />}
+  </div>
+}
+
+function BackgroundLayer({ background, phase }: { background: Background; phase: 'leaving' | 'entering' | 'resting' }) {
+  const className = `${background.className} theme-background-layer ${phase}`
+  return background.kind === 'image'
+    ? <PixelatedImageBackground source={background.source} pixelSize={background.pixelSize ?? 5} className={className} />
+    : <PixelatedVideoBackground source={background.source} poster={background.poster} className={className} />
 }
 
 function PixelatedImageBackground({ source, pixelSize, className }: { source: string; pixelSize: number; className: string }) {
@@ -429,33 +455,80 @@ function PixelatedImageBackground({ source, pixelSize, className }: { source: st
   return <canvas ref={canvasRef} className={`pixel-canvas-bg ${className}`} aria-hidden="true" />
 }
 
-function PixelatedVideoBackground({ source, poster }: { source: string; poster?: string }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const videoRef = useRef<HTMLVideoElement | null>(null)
+function PixelatedVideoBackground({ source, poster, className }: { source: string; poster?: string; className: string }) {
+  const canvasRefs = [useRef<HTMLCanvasElement | null>(null), useRef<HTMLCanvasElement | null>(null)]
+  const videoRefs = [useRef<HTMLVideoElement | null>(null), useRef<HTMLVideoElement | null>(null)]
+  const [activeLayer, setActiveLayer] = useState(0)
+  const [crossfading, setCrossfading] = useState(false)
+  const activeLayerRef = useRef(0)
+  const crossfadingRef = useRef(false)
+
   useEffect(() => {
-    const canvas = canvasRef.current
-    const video = videoRef.current
-    if (!canvas || !video) return
+    const canvases = canvasRefs.map(ref => ref.current)
+    const videos = videoRefs.map(ref => ref.current)
+    if (canvases.some(canvas => !canvas) || videos.some(video => !video)) return
     let frame = 0
+    let disposed = false
+
+    const play = (video: HTMLVideoElement) => video.play().catch(() => undefined)
+    const beginCrossfade = () => {
+      if (crossfadingRef.current || disposed) return
+      const currentLayer = activeLayerRef.current
+      const incomingLayer = currentLayer === 0 ? 1 : 0
+      const incoming = videos[incomingLayer]!
+      incoming.currentTime = 0
+      play(incoming)
+      crossfadingRef.current = true
+      setCrossfading(true)
+    }
+    const completeCrossfade = () => {
+      const outgoingLayer = activeLayerRef.current
+      const incomingLayer = outgoingLayer === 0 ? 1 : 0
+      const outgoing = videos[outgoingLayer]!
+      outgoing.pause()
+      outgoing.currentTime = 0
+      activeLayerRef.current = incomingLayer
+      crossfadingRef.current = false
+      setActiveLayer(incomingLayer)
+      setCrossfading(false)
+    }
     const draw = () => {
-      const context = canvas.getContext('2d')
       const width = Math.max(1, Math.ceil(window.innerWidth / 5))
       const height = Math.max(1, Math.ceil(window.innerHeight / 5))
-      if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height }
-      if (context && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      canvases.forEach((canvas, index) => {
+        const video = videos[index]!
+        const context = canvas!.getContext('2d')
+        if (canvas!.width !== width || canvas!.height !== height) { canvas!.width = width; canvas!.height = height }
+        if (!context || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth) return
         context.imageSmoothingEnabled = false
         const scale = Math.max(width / video.videoWidth, height / video.videoHeight)
         const drawWidth = video.videoWidth * scale
         const drawHeight = video.videoHeight * scale
         context.drawImage(video, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight)
-      }
+      })
+      const activeVideo = videos[activeLayerRef.current]!
+      if (!crossfadingRef.current && Number.isFinite(activeVideo.duration) && activeVideo.duration > 1 && activeVideo.currentTime >= activeVideo.duration - 0.9) beginCrossfade()
       frame = window.requestAnimationFrame(draw)
     }
-    video.play().catch(() => undefined)
+    const first = videos[0]!
+    const onReady = () => play(first)
+    const onEnded = (event: Event) => {
+      const endedVideo = event.currentTarget as HTMLVideoElement
+      if (crossfadingRef.current) completeCrossfade()
+      else { endedVideo.currentTime = 0; play(endedVideo) }
+    }
+    first.addEventListener('loadeddata', onReady, { once: true })
+    videos.forEach(video => video!.addEventListener('ended', onEnded))
+    play(first)
     draw()
-    return () => window.cancelAnimationFrame(frame)
+    return () => {
+      disposed = true
+      window.cancelAnimationFrame(frame)
+      first.removeEventListener('loadeddata', onReady)
+      videos.forEach(video => video!.removeEventListener('ended', onEnded))
+    }
   }, [source])
-  return <><canvas ref={canvasRef} className="pixel-canvas-bg pixel-video-bg visible" aria-hidden="true" /><video ref={videoRef} className="pixel-video-source" autoPlay muted loop playsInline poster={poster}><source src={source} type="video/webm" /></video></>
+  return <>{[0, 1].map(index => <canvas key={index} ref={canvasRefs[index]} className={`pixel-canvas-bg pixel-video-bg ${className} video-layer ${activeLayer === index ? (crossfading ? 'leaving' : 'resting') : (crossfading ? 'entering' : 'hidden')}`} aria-hidden="true" />)}{[0, 1].map(index => <video key={index} ref={videoRefs[index]} className="pixel-video-source" muted playsInline preload="auto" poster={poster}><source src={source} type="video/webm" /></video>)}</>
 }
 
 function LocalAuthPage({ onAuthenticated }: { onAuthenticated: (session: AppSession) => void }) {
@@ -491,8 +564,9 @@ function useCalendarArt(date: Date) {
   return art
 }
 
-function Home({ works, feedback, dateLabel, clockText, clock, onAdd, onOpenWork, onNavigate }: { works: Work[]; feedback: FeedbackEvent[]; dateLabel: string; clockText: string; clock: Date; onAdd: () => void; onOpenWork: (work: Work) => void; onNavigate: (tab: Tab) => void }) {
+function Home({ works, feedback, clockText, clock, onAdd, onOpenWork, onNavigate }: { works: Work[]; feedback: FeedbackEvent[]; clockText: string; clock: Date; onAdd: () => void; onOpenWork: (work: Work) => void; onNavigate: (tab: Tab) => void }) {
   const now = new Date()
+  const calendarLabel = `${clock.getMonth() + 1} 月 ${clock.getDate()} 日`
   const hourAngle = (now.getHours() % 12) * 30 + now.getMinutes() * 0.5
   const minuteAngle = now.getMinutes() * 6 + now.getSeconds() * 0.1
   const secondAngle = now.getSeconds() * 6
@@ -510,13 +584,13 @@ function Home({ works, feedback, dateLabel, clockText, clock, onAdd, onOpenWork,
       <p className="aside-note">把每一次认真，都留在这里。</p>
     </aside>
     <section className="studio-stage">
-      <section className="hero studio-hero"><p className="eyebrow">{dateLabel}</p><h1>把创作过成<br />自己的生活。</h1><p>不用急着解释数据，先把每一次认真留下来。</p><button className="primary tile-interactive" onClick={onAdd}>记录新作品</button></section>
+      <section className="hero studio-hero"><h1>把创作过成<br />自己的生活。</h1><p>不用急着解释数据，先把每一次认真留下来。</p><button className="primary tile-interactive" onClick={onAdd}>记录新作品</button></section>
       {latest && <button className="latest-tile tile-interactive" onClick={() => onOpenWork(latest)}><span className="tile-label">最近发布</span><WorkCard work={latest} /><span className="tile-hint">查看这条作品</span></button>}
       <section className="moments-board"><p className="eyebrow">最近七天值得记住</p>{feedback.length ? feedback.slice(0, 2).map(item => <article className="moment tile-interactive" key={item.id}><span>{item.type}</span><p>{item.content}</p></article>) : <p className="empty">这七天还没有收藏的时刻。记录一条作品，或给自己留句话。</p>}</section>
     </section>
     <aside className="dashboard-rail">
       <article className="clock-widget tile-interactive" aria-label={`像素时钟 ${clockText}`}><span>创作时间</span><strong className="pixel-clock" style={{ '--hour-angle': `${hourAngle}deg`, '--minute-angle': `${minuteAngle}deg`, '--second-angle': `${secondAngle}deg` } as React.CSSProperties}><i className="clock-hour" /><i className="clock-minute" /><i className="clock-second" /><b className="clock-center" /></strong><small>留给自己的十分钟</small></article>
-      <article className="calendar-widget tile-interactive" aria-label={dateLabel}>{calendarArt ? <img src={calendarArt} alt={`台历，今天是${dateLabel}`} /> : null}</article>
+      <article className="calendar-widget tile-interactive" aria-label={calendarLabel}>{calendarArt ? <img src={calendarArt} alt={`台历，今天是${calendarLabel}`} /> : null}</article>
       <article className="metric-widget tile-interactive"><p>最近七天</p><div><strong>{works.length}</strong><span>条作品</span></div><div><strong>{number(totalLikes)}</strong><span>个喜欢</span></div><div><strong>{feedback.length}</strong><span>次收藏</span></div></article>
     </aside>
   </div>

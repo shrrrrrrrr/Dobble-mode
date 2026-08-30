@@ -21,9 +21,8 @@ const topicStatusOrder: TopicStatus[] = ['idea', 'planning', 'creating', 'publis
 
 const topicSources: TopicSource[] = ['灵感', '热点', '日常', '改编']
 
-export function ProfessionalMode({ tab, onTabChange, works, topics, templates, records, reviews, onTopicsChange, onTemplatesChange, onRecordsChange, onReviewsChange }: {
+export function ProfessionalMode({ tab, works, topics, templates, records, reviews, onTopicsChange, onTemplatesChange, onRecordsChange, onReviewsChange }: {
   tab: ProfessionalTab
-  onTabChange: (tab: ProfessionalTab) => void
   works: Work[]
   topics: Topic[]
   templates: ScoreTemplate[]
@@ -36,14 +35,7 @@ export function ProfessionalMode({ tab, onTabChange, works, topics, templates, r
 }) {
   return <div className="professional">
     <section className="page-head pro-head">
-      <p className="eyebrow">专业模式</p>
       <h1>选题、评分<br />和复盘，连成一条线。</h1>
-      <div className="pro-tabs" role="tablist" aria-label="专业模式导航">
-        <button className={tab === 'topics' ? 'active' : ''} onClick={() => onTabChange('topics')}>选题库</button>
-        <button className={tab === 'scoring' ? 'active' : ''} onClick={() => onTabChange('scoring')}>评分</button>
-        <button className={tab === 'review' ? 'active' : ''} onClick={() => onTabChange('review')}>复盘</button>
-        <button className={tab === 'data' ? 'active' : ''} onClick={() => onTabChange('data')}>数据</button>
-      </div>
     </section>
     {tab === 'topics' && <TopicBoard works={works} topics={topics} onTopicsChange={onTopicsChange} />}
     {tab === 'scoring' && <ScoreStudio works={works} templates={templates} records={records} onTemplatesChange={onTemplatesChange} onRecordsChange={onRecordsChange} />}
@@ -88,9 +80,9 @@ function TopicBoard({ works, topics, onTopicsChange }: { works: Work[]; topics: 
 
   return <section className="pro-board">
     <div className="board-toolbar">
-      <div className="chip-row">
+      <div className="chip-row pro-filter-row" role="group" aria-label="选题状态筛选">
         {(['all', 'idea', 'planning', 'creating', 'published', 'archived'] as const).map(key => (
-          <button key={key} className={filter === key ? 'active' : ''} onClick={() => setFilter(key)}>{key === 'all' ? '全部' : topicStatusLabel[key]}</button>
+          <button key={key} className={`pro-filter-button ${filter === key ? 'active' : ''}`} onClick={() => setFilter(key)}>{key === 'all' ? '全部' : topicStatusLabel[key]}</button>
         ))}
       </div>
       <button className="primary compact-static" onClick={() => setShowForm(true)}>新选题</button>
@@ -147,7 +139,7 @@ function ScoreStudio({ works, templates, records, onTemplatesChange, onRecordsCh
     <div className="board-toolbar">
       <p className="eyebrow">评分模板</p>
       <div className="toolbar-actions">
-        <button onClick={() => setEditingTemplate({ id: crypto.randomUUID(), name: '新模板', items: [{ id: crypto.randomUUID(), label: '维度一', weight: 100 }] })}>新建模板</button>
+        <button className="pro-secondary-action" onClick={() => setEditingTemplate({ id: crypto.randomUUID(), name: '新模板', items: [{ id: crypto.randomUUID(), label: '维度一', weight: 100 }] })}>新建模板</button>
         <button className="primary compact-static" onClick={() => setScoring(true)} disabled={!works.length}>开始评分</button>
       </div>
     </div>
@@ -156,7 +148,7 @@ function ScoreStudio({ works, templates, records, onTemplatesChange, onRecordsCh
         <h3>{template.name}</h3>
         <ul>{template.items.map(item => <li key={item.id}><span>{item.label}</span><b>{item.weight}%</b></li>)}</ul>
         <div className="topic-actions">
-          <button onClick={() => setEditingTemplate(JSON.parse(JSON.stringify(template)) as ScoreTemplate)}>编辑</button>
+          <button className="pro-secondary-action" onClick={() => setEditingTemplate(JSON.parse(JSON.stringify(template)) as ScoreTemplate)}>编辑</button>
           {template.id !== 'tpl-default' && <button className="text-action" onClick={() => onTemplatesChange(templates.filter(item => item.id !== template.id))}>删除</button>}
         </div>
       </article>)}
@@ -210,7 +202,7 @@ function TemplateForm({ template, onSave }: { template: ScoreTemplate; onSave: (
       </div>)}
     </div>
     <div className="toolbar-actions">
-      <button type="button" onClick={() => setDraft({ ...draft, items: [...draft.items, { id: crypto.randomUUID(), label: '', weight: 10 }] })}>添加维度</button>
+      <button className="pro-secondary-action" type="button" onClick={() => setDraft({ ...draft, items: [...draft.items, { id: crypto.randomUUID(), label: '', weight: 10 }] })}>添加维度</button>
       <small className={weightSum === 100 ? '' : 'weight-warning'}>当前权重合计 {weightSum}%（保存时自动归一到 100%）</small>
     </div>
     <button className="primary" type="submit">保存模板</button>
