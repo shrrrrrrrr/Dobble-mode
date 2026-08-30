@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { type ComponentProps, FormEvent, lazy, ReactNode, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import type { FeedbackEvent, Platform, Post, ProfessionalTab, Tab, UserProfile, Work } from './types'
 import { compressImage } from './utils/image'
 import { createRecapMedia } from './utils/recapMedia'
@@ -9,9 +9,15 @@ import { importLegacyV1Data, markLegacyDismissed, markLegacyImported, shouldOffe
 import { emptyAppState, LocalAppRepository, normalizeAppState, touchAppState, type AppState } from './services/repository'
 import { cloudEnabled, cloudSignIn, cloudSignOut, cloudSignUp, fetchCloudState, getCloudAccount, getPrimarySession, onPrimaryAuthStateChange, pushCloudState, type CloudAccount } from './services/cloud'
 import { badgeRules, evaluateBadges } from './services/badges'
-import { seasonPacks, themePacks, type SeasonId, type ThemeId } from './theme'
-import { ProfessionalMode } from './professional/ProfessionalMode'
+import { getThemePack, seasonPacks, themePacks, type SeasonId, type ThemeId } from './theme'
 import { Modal } from './components/Modal'
+
+// 专业模式仅在用户首次进入时加载，生活模式首屏无需下载和解析这部分代码。
+const LazyProfessionalMode = lazy(() => import('./professional/ProfessionalMode').then(module => ({ default: module.ProfessionalMode })))
+
+function ProfessionalMode(props: ComponentProps<typeof LazyProfessionalMode>) {
+  return <Suspense fallback={<section className="page-head"><p className="eyebrow">专业模式</p><h1>正在整理创作资料...</h1></section>}><LazyProfessionalMode {...props} /></Suspense>
+}
 
 function hasSavedContent(state: AppState) {
   const hasRecords = state.works.length + state.feedback.length + state.posts.length + state.topics.length + state.scoreRecords.length + state.reviews.length > 0
@@ -281,6 +287,7 @@ export default function App() {
   const recentWorks = state.works.filter(work => isInRecentSevenDays(work.publishedAt, recentWindow))
   const recentFeedback = state.feedback.filter(item => isInRecentSevenDays(item.createdAt, recentWindow))
   const theme = state.theme
+  const companionImage = getThemePack(theme).companionImage
 
   function changeTheme(nextTheme: ThemeId) {
     const pack = themePacks.find(item => item.id === nextTheme)
@@ -450,7 +457,7 @@ export default function App() {
         ? <nav className="bottom-nav pro-nav">{proNav.map(item => <button key={item.id} className={proTab === item.id ? 'active' : ''} onClick={() => setProTab(item.id)}><span className="nav-mark" />{item.label}</button>)}</nav>
         : <nav className="bottom-nav">{nav.map(item => <button key={item.id} className={tab === item.id ? 'active' : ''} onClick={() => { setTab(item.id); if (item.id === 'community') setCommunityView('feed') }}><span className="nav-mark" />{item.label}</button>)}</nav>)}
     </section>
-    {state.mode === 'life' && <button ref={companionRef} className={`companion ${assistantPinned ? 'pinned' : ''}`} onPointerEnter={() => setAssistantHovered(true)} onPointerLeave={() => setAssistantHovered(false)} onClick={() => setAssistantPinned(open => !open)} aria-label="打开或关闭创作陪伴"><img src={`/assets/companions/${theme}-companion.png`} alt="" /><span>留</span></button>}
+    {state.mode === 'life' && <button ref={companionRef} className={`companion ${assistantPinned ? 'pinned' : ''}`} onPointerEnter={() => setAssistantHovered(true)} onPointerLeave={() => setAssistantHovered(false)} onClick={() => setAssistantPinned(open => !open)} aria-label="打开或关闭创作陪伴"><img src={companionImage} alt="" /><span>留</span></button>}
     {state.mode === 'life' && (assistantPinned || assistantHovered) && <div ref={assistantPanelRef} className="assistant-panel" onPointerEnter={() => setAssistantHovered(true)} onPointerLeave={() => setAssistantHovered(false)}><p className="eyebrow">创作陪伴</p><h2>今天也在记录。</h2><p className="assistant-answer">{answer}</p><form onSubmit={askAssistant}><input value={question} onChange={e => setQuestion(e.target.value)} placeholder="问问我关于你的创作" /><button>发送</button></form></div>}
     {showWorkForm && <Modal title="记录一条作品" onClose={() => setShowWorkForm(false)}><WorkForm onSave={saveWork} /></Modal>}
     {showPostForm && <Modal title="发布到社区" onClose={() => setShowPostForm(false)}><PostForm onSave={savePost} /></Modal>}
@@ -518,6 +525,7 @@ function PixelatedImageBackground({ source, pixelSize, className, focalPoint }: 
     if (!canvas || !source) return
     const context = canvas.getContext('2d')
     const image = new Image()
+    let resizeFrame = 0
     const draw = () => {
       if (!context || !image.naturalWidth) return
       const width = Math.max(1, Math.ceil(window.innerWidth / pixelSize))
@@ -533,10 +541,22 @@ function PixelatedImageBackground({ source, pixelSize, className, focalPoint }: 
       const drawY = Math.min(0, Math.max(height - drawHeight, height / 2 - drawHeight * focus.y))
       context.drawImage(image, drawX, drawY, drawWidth, drawHeight)
     }
+    // 窗口缩放可能在一帧内触发多次 resize；合并到下一帧可避免重复清空和重绘 canvas。
+    const scheduleDraw = () => {
+      if (resizeFrame) return
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = 0
+        draw()
+      })
+    }
     image.onload = draw
     image.src = source
-    window.addEventListener('resize', draw)
-    return () => window.removeEventListener('resize', draw)
+    window.addEventListener('resize', scheduleDraw)
+    return () => {
+      image.onload = null
+      window.removeEventListener('resize', scheduleDraw)
+      if (resizeFrame) window.cancelAnimationFrame(resizeFrame)
+    }
   }, [source, pixelSize, focalPoint.x, focalPoint.y])
   return <canvas ref={canvasRef} className={`pixel-canvas-bg ${className}`} aria-hidden="true" />
 }
@@ -551,6 +571,9 @@ function PixelatedVideoBackground({ source, poster, className, focalPoint }: { s
     const canvas = canvasRef.current
     const video = videoRef.current
     if (!canvas || !video) return
+    // 2D context 在整个视频生命周期内保持不变，避免每一帧重复查询。
+    const context = canvas.getContext('2d')
+    if (!context) return
     let frame = 0
     const firstFrame = document.createElement('canvas')
     let capturedFirstFrame = false
@@ -579,21 +602,18 @@ function PixelatedVideoBackground({ source, poster, className, focalPoint }: { s
     const draw = () => {
       const width = Math.max(1, Math.ceil(window.innerWidth / 5))
       const height = Math.max(1, Math.ceil(window.innerHeight / 5))
-      const context = canvas.getContext('2d')
       if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height }
-      if (context) {
-        context.imageSmoothingEnabled = false
-        context.clearRect(0, 0, width, height)
-        if (posterReady) drawSource(context, posterImage, posterImage.naturalWidth, posterImage.naturalHeight, width, height)
-        if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth) {
-          const { drawX, drawY, drawWidth, drawHeight } = drawSource(context, video, video.videoWidth, video.videoHeight, width, height)
-          const seamDuration = 0.28
-          const remaining = video.duration - video.currentTime
-          if (capturedFirstFrame && Number.isFinite(remaining) && remaining > 0 && remaining < seamDuration) {
-            context.globalAlpha = 1 - remaining / seamDuration
-            context.drawImage(firstFrame, drawX, drawY, drawWidth, drawHeight)
-            context.globalAlpha = 1
-          }
+      context.imageSmoothingEnabled = false
+      context.clearRect(0, 0, width, height)
+      if (posterReady) drawSource(context, posterImage, posterImage.naturalWidth, posterImage.naturalHeight, width, height)
+      if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth) {
+        const { drawX, drawY, drawWidth, drawHeight } = drawSource(context, video, video.videoWidth, video.videoHeight, width, height)
+        const seamDuration = 0.28
+        const remaining = video.duration - video.currentTime
+        if (capturedFirstFrame && Number.isFinite(remaining) && remaining > 0 && remaining < seamDuration) {
+          context.globalAlpha = 1 - remaining / seamDuration
+          context.drawImage(firstFrame, drawX, drawY, drawWidth, drawHeight)
+          context.globalAlpha = 1
         }
       }
       frame = window.requestAnimationFrame(draw)

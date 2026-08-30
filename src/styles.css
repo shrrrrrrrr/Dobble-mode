@@ -136,9 +136,10 @@ h1 { font-size:38px; }
 body[data-theme='night'] { --canvas:#f1d9e4; --paper:rgba(255,249,252,.93); --ink:#552f4a; --muted:#8f607f; --line:rgba(255,255,255,.82); --green:#b85b88; --orange:#dc7999; --yellow:#e7adbf; --shadow:rgba(92,45,76,.24); background:#f1d9e4; }
 .sakura-background { position:fixed; inset:0; z-index:-2; background:url('/assets/sakura/background.jpg') center/cover no-repeat; filter:saturate(1.16) brightness(1.1) contrast(1.03); }
 .sakura-background::after { content:''; position:absolute; inset:0; background:linear-gradient(180deg,rgba(255,239,247,.08),rgba(84,37,70,.17)); }
-.theme-dot { overflow:hidden; background-image:url('/assets/theme-icons/crayon-shinchan.png'); background-size:cover; background-position:center; }
+.theme-dot { overflow:hidden; background-image:url('/assets/theme-icons/crayon-shinchan-thumb.png'); background-size:cover; background-position:center; }
 .theme-dot.cream { background-image:url('/assets/theme-icons/beihang-badge.jpg'); background-size:cover; }
-.theme-dot.night { background-image:url('/assets/sakura/background.jpg'); background-size:cover; }
+/* 主题按钮使用独立小预览图，避免用户尚未切换主题时就下载完整背景。 */
+.theme-dot.night { background-image:url('/assets/theme-icons/sakura-thumb.jpg'); background-size:cover; }
 body[data-theme='cream'] .primary, body[data-theme='cream'] .profile-nav-button { background:#347fbd; color:#fff; }
 body[data-theme='night'] .primary, body[data-theme='night'] .profile-nav-button { background:#b85b88; color:#fff; }
 .modal-backdrop { z-index:100; background:rgba(30,24,38,.48); backdrop-filter:blur(2px); }

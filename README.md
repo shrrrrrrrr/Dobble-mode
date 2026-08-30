@@ -2,7 +2,7 @@
 
 面向内容创作者的双模式工具。生活模式记录作品、过程感受与值得记住的反馈，并整理成短期回看；专业模式管理选题、评分与复盘。
 
-当前版本：**V3.8**（Supabase 主登录、旧本地数据迁移、短周期回忆媒体采样）
+当前版本：**V3.10**（Android 原生壳、按需代码加载、轻量主题素材）
 
 仓库：[github.com/shrrrrrrrr/Dobble-mode](https://github.com/shrrrrrrrr/Dobble-mode)
 

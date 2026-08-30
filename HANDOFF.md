@@ -1925,3 +1925,72 @@ M README.md
 M src/services/cloud.ts
  M src/services/repository.ts
 ```
+
+
+### 工作日志 2026年8月31日 01:50
+
+- 记录：V3.10 全局性能优化（保持功能不变）：专业模式改为 React.lazy + Suspense 首次进入时按需加载，首屏主 JS 从约 385.55kB 降至 371.07kB；背景图片 resize 绘制合并到 requestAnimationFrame，视频 canvas 复用 2D context。为主题按钮、三个陪伴角色和春/冬背景生成界面尺寸轻量副本，运行时改用轻量素材并添加中文注释。确认无运行时引用的北航 19 图、旧循环视频、高分辨率原图等从 public 原样迁移至 design-assets/archive，未删除；生产静态资源从 158.23MB 降至 10.57MB，dist 10.99MB。新增受路径校验保护的 scripts/sync-android.mjs，同步前只清理 Git 忽略的 Android Web 生成副本，避免旧素材残留。完整验证 62/62、生产预览全部关键资源与专业分包 HTTP 200、git diff --check 通过。Android clean build 成功，debug APK 从约 160.02MB 降至 14.64MB（约 90.9%），SHA-256 AB0FC997576B6CE4C48E7F518DCB2A86FEEE8AA1C56929B3E301BDBB5237987A。业务规则、Supabase、数据结构、页面功能与交互语义未改。
+- 记录时 HEAD：`aefa5af`
+- 工作区状态：
+
+```text
+M README.md
+R  public/assets/buaa-all/1344E103D08523ECB995EDC959D_E27E33C5_5D61B4.jpg -> design-assets/archive/buaa-all/1344E103D08523ECB995EDC959D_E27E33C5_5D61B4.jpg
+R  public/assets/buaa-all/186F90CAF9F031263ED9CFDE48B_3C791A4D_854B95.jpg -> design-assets/archive/buaa-all/186F90CAF9F031263ED9CFDE48B_3C791A4D_854B95.jpg
+R  public/assets/buaa-all/1A56DE5F5617F3173B1CDA5C145_D05AFE54_46F43E.jpg -> design-assets/archive/buaa-all/1A56DE5F5617F3173B1CDA5C145_D05AFE54_46F43E.jpg
+R  public/assets/buaa-all/1F354D06F300B5D20B702B21A1F_9591836D_717478.jpg -> design-assets/archive/buaa-all/1F354D06F300B5D20B702B21A1F_9591836D_717478.jpg
+R  public/assets/buaa-all/25409024A532C17DCB6B58A65E9_8A2143F6_3D3846.jpg -> design-assets/archive/buaa-all/25409024A532C17DCB6B58A65E9_8A2143F6_3D3846.jpg
+R  public/assets/buaa-all/28C8CD8C407C396C1F4DA111AD3_ADFAA590_40F3F8.jpg -> design-assets/archive/buaa-all/28C8CD8C407C396C1F4DA111AD3_ADFAA590_40F3F8.jpg
+R  public/assets/buaa-all/36027C82EC85EF440D9252C95B5_7D434477_6789F5.jpg -> design-assets/archive/buaa-all/36027C82EC85EF440D9252C95B5_7D434477_6789F5.jpg
+R  public/assets/buaa-all/3986F04040719E81AF9116AF4D1_1B7BD2C3_7F59EF.jpg -> design-assets/archive/buaa-all/3986F04040719E81AF9116AF4D1_1B7BD2C3_7F59EF.jpg
+R  public/assets/buaa-all/3A436E14A82D6376274CE8A1F02_907508B7_6525F7.jpg -> design-assets/archive/buaa-all/3A436E14A82D6376274CE8A1F02_907508B7_6525F7.jpg
+R  public/assets/buaa-all/413BA599649191FD4CE0915F610_188232A6_5923BB.jpg -> design-assets/archive/buaa-all/413BA599649191FD4CE0915F610_188232A6_5923BB.jpg
+R  public/assets/buaa-all/45696CF1B5A9BCED3FA99CDCF7E_351EFE50_3EA4C4.jpg -> design-assets/archive/buaa-all/45696CF1B5A9BCED3FA99CDCF7E_351EFE50_3EA4C4.jpg
+R  public/assets/buaa-all/465D0EA05FD93C39662E07DE2E9_F2828531_1A875.jpg -> design-assets/archive/buaa-all/465D0EA05FD93C39662E07DE2E9_F2828531_1A875.jpg
+R  public/assets/buaa-all/4889D4972194B88E348682E4476_2039CA4D_8CB643.jpg -> design-assets/archive/buaa-all/4889D4972194B88E348682E4476_2039CA4D_8CB643.jpg
+R  public/assets/buaa-all/5FF3ADE4FEABE9E4895CE9824B0_C1C628CC_2F99F.jpg -> design-assets/archive/buaa-all/5FF3ADE4FEABE9E4895CE9824B0_C1C628CC_2F99F.jpg
+R  public/assets/buaa-all/7C4BA538FE77C29D406171193AB_0037FC41_4B59F0.jpg -> design-assets/archive/buaa-all/7C4BA538FE77C29D406171193AB_0037FC41_4B59F0.jpg
+R  public/assets/buaa-all/B577CC58C1510459A1D669265E0_03DB4E4B_23366.jpg -> design-assets/archive/buaa-all/B577CC58C1510459A1D669265E0_03DB4E4B_23366.jpg
+R  public/assets/buaa-all/BB06CDDB0E513C222AD59417D8F_4193B7EF_673820.jpg -> design-assets/archive/buaa-all/BB06CDDB0E513C222AD59417D8F_4193B7EF_673820.jpg
+R  public/assets/buaa-all/BB1C6421EBFF297CCA7A900EE00_0AFC73B2_59679A.jpg -> design-assets/archive/buaa-all/BB1C6421EBFF297CCA7A900EE00_0AFC73B2_59679A.jpg
+R  public/assets/buaa-all/D6C562D671DCB77CB5CD8FE6116_A3D1868D_48092A.jpg -> design-assets/archive/buaa-all/D6C562D671DCB77CB5CD8FE6116_A3D1868D_48092A.jpg
+R  public/assets/buaa-autumn-clouds-pixel.png -> design-assets/archive/buaa/buaa-autumn-clouds-pixel.png
+R  public/assets/buaa-autumn-loop.webm -> design-assets/archive/buaa/buaa-autumn-loop.webm
+R  public/assets/buaa-autumn-pixel.png -> design-assets/archive/buaa/buaa-autumn-pixel.png
+R  public/assets/buaa-autumn.jpg -> design-assets/archive/buaa/buaa-autumn.jpg
+R  public/assets/buaa-gallery-autumn.jpg -> design-assets/archive/buaa/buaa-gallery-autumn.jpg
+R  public/assets/buaa-gallery-library.jpg -> design-assets/archive/buaa/buaa-gallery-library.jpg
+R  public/assets/buaa-gallery-spring.jpg -> design-assets/archive/buaa/buaa-gallery-spring.jpg
+R  public/assets/buaa-gallery-winter.jpg -> design-assets/archive/buaa/buaa-gallery-winter.jpg
+R  public/assets/buaa-spring-loop.webm -> design-assets/archive/buaa/buaa-spring-loop.webm
+R  public/assets/buaa-spring-pixel.png -> design-assets/archive/buaa/buaa-spring-pixel.png
+R  public/assets/buaa-spring-source.jpg -> design-assets/archive/buaa/buaa-spring-source.jpg
+R  public/assets/buaa-summer.jpg -> design-assets/archive/buaa/buaa-summer.jpg
+R  public/assets/calendar/desk-calendar.webp -> design-assets/archive/calendar/desk-calendar.webp
+R  public/assets/companions/cream-companion.png -> design-assets/archive/companions/cream-companion.png
+R  public/assets/companions/mint-companion.png -> design-assets/archive/companions/mint-companion.png
+R  public/assets/companions/night-companion.png -> design-assets/archive/companions/night-companion.png
+R  public/assets/pixel-loop-preview.png -> design-assets/archive/default-theme/pixel-loop-preview.png
+R  public/assets/pixel-loop.webm -> design-assets/archive/default-theme/pixel-loop.webm
+R  public/assets/pixel-original.mp4 -> design-assets/archive/default-theme/pixel-original.mp4
+R  public/assets/seasons/autumn-pixel-v2.png -> design-assets/archive/seasons/autumn-pixel-v2.png
+R  public/assets/seasons/spring-pixel-v2.png -> design-assets/archive/seasons/spring-pixel-v2.png
+R  public/assets/seasons/spring.jpg -> design-assets/archive/seasons/spring.jpg
+R  public/assets/seasons/summer-pixel-v2.png -> design-assets/archive/seasons/summer-pixel-v2.png
+R  public/assets/seasons/winter-pixel-v2.png -> design-assets/archive/seasons/winter-pixel-v2.png
+R  public/assets/seasons/winter.jpg -> design-assets/archive/seasons/winter.jpg
+R  public/assets/theme-icons/crayon-shinchan.png -> design-assets/archive/theme-icons/crayon-shinchan.png
+ M docs/BEIHANG_SEASONS_UI_SPEC.md
+ M package.json
+ M scripts/verify-final.mjs
+ M src/App.tsx
+ M src/styles.css
+ M src/theme.ts
+?? design-assets/README.md
+?? public/assets/companions/
+?? public/assets/seasons/spring-ui.jpg
+?? public/assets/seasons/winter-ui.jpg
+?? public/assets/theme-icons/crayon-shinchan-thumb.png
+?? public/assets/theme-icons/sakura-thumb.jpg
+?? scripts/sync-android.mjs
+```

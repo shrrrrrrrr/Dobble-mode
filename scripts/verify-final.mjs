@@ -1,5 +1,5 @@
 import { pbkdf2Sync, randomUUID } from 'node:crypto'
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync, statSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
@@ -200,10 +200,51 @@ if (existsSync(join(root, 'android', 'app', 'build.gradle')) && existsSync(join(
   fail('Android native project and Gradle wrapper exist')
 }
 const packageSource = source(['package.json'])
-if (packageSource.includes('"android:sync"') && packageSource.includes('"android:apk"')) ok('Android sync and APK scripts exist')
+if (packageSource.includes('"android:sync"') && packageSource.includes('"android:apk"') && existsSync(join(root, 'scripts', 'sync-android.mjs'))) ok('Android sync and APK scripts exist')
 else fail('Android sync and APK scripts exist')
 if (existsSync(join(root, 'docs', 'ANDROID_BUILD.md'))) ok('Android build guide exists')
 else fail('Android build guide exists')
+
+console.log('\nFrontend performance (V3.10)')
+const themeSource = source(['src', 'theme.ts'])
+const styleSource = source(['src', 'styles.css'])
+if (appSource.includes("lazy(() => import('./professional/ProfessionalMode')") && appSource.includes('<Suspense')) {
+  ok('professional mode is loaded on demand')
+} else {
+  fail('professional mode is loaded on demand')
+}
+const lightweightAssets = [
+  ['public', 'assets', 'theme-icons', 'crayon-shinchan-thumb.png'],
+  ['public', 'assets', 'theme-icons', 'sakura-thumb.jpg'],
+  ['public', 'assets', 'companions', 'mint-companion-ui.png'],
+  ['public', 'assets', 'companions', 'cream-companion-ui.png'],
+  ['public', 'assets', 'companions', 'night-companion-ui.png'],
+  ['public', 'assets', 'seasons', 'spring-ui.jpg'],
+  ['public', 'assets', 'seasons', 'winter-ui.jpg'],
+]
+if (lightweightAssets.every(parts => existsSync(join(root, ...parts)))) ok('lightweight theme assets exist')
+else fail('lightweight theme assets exist')
+const lightweightBytes = lightweightAssets.reduce((sum, parts) => sum + statSync(join(root, ...parts)).size, 0)
+if (lightweightBytes < 2_500_000) ok('lightweight theme assets stay below 2.5 MB total')
+else fail('lightweight theme assets stay below 2.5 MB total', `${lightweightBytes} bytes`)
+if (themeSource.includes('spring-ui.jpg') && themeSource.includes('winter-ui.jpg') && themeSource.includes('companion-ui.png')) {
+  ok('runtime theme metadata uses lightweight assets')
+} else {
+  fail('runtime theme metadata uses lightweight assets')
+}
+if (styleSource.includes('crayon-shinchan-thumb.png') && styleSource.includes('sakura-thumb.jpg')) ok('theme buttons use thumbnail assets')
+else fail('theme buttons use thumbnail assets')
+if (appSource.includes('requestAnimationFrame(() =>') && appSource.includes('window.cancelAnimationFrame(resizeFrame)')) {
+  ok('image background resize drawing is frame-throttled')
+} else {
+  fail('image background resize drawing is frame-throttled')
+}
+const androidSyncSource = source(['scripts', 'sync-android.mjs'])
+if (androidSyncSource.includes("rmSync(generatedWebAssets") && androidSyncSource.includes("relative(nativeAssetsRoot")) {
+  ok('Android sync removes only verified stale web assets')
+} else {
+  fail('Android sync removes only verified stale web assets')
+}
 
 console.log('\nBuild')
 const build = spawnSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'build'], {

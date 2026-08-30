@@ -14,21 +14,21 @@
 
 | 季节 | 主背景 | 线上地址 | 主强调色 | 氛围 |
 | --- | --- | --- | --- | --- |
-| 春 | `public/assets/seasons/spring.jpg`，8256 x 5504 | `https://dobble-mode.vercel.app/assets/seasons/spring.jpg` | `#d87891` | 粉色春日校园 |
+| 春 | `public/assets/seasons/spring-ui.jpg`，1920 x 1280 | `https://dobble-mode.vercel.app/assets/seasons/spring-ui.jpg` | `#d87891` | 粉色春日校园 |
 | 夏 | `public/assets/seasons/summer.jpg`，1024 x 646 | `https://dobble-mode.vercel.app/assets/seasons/summer.jpg` | `#299b91` | 清爽青绿校园 |
 | 秋 | `public/assets/seasons/autumn.jpg`，1024 x 682 | `https://dobble-mode.vercel.app/assets/seasons/autumn.jpg` | `#c7773e` | 暖橙秋日校园 |
-| 冬 | `public/assets/seasons/winter.jpg`，5941 x 3961 | `https://dobble-mode.vercel.app/assets/seasons/winter.jpg` | `#5e9ec9` | 冷蓝冬日校园 |
+| 冬 | `public/assets/seasons/winter-ui.jpg`，1920 x 1280 | `https://dobble-mode.vercel.app/assets/seasons/winter-ui.jpg` | `#5e9ec9` | 冷蓝冬日校园 |
 
 辅助素材：
 
 | 用途 | 本地文件 | 线上地址 | 用法 |
 | --- | --- | --- | --- |
 | 北航主题缩略图 | `public/assets/theme-icons/beihang-badge.jpg` | `https://dobble-mode.vercel.app/assets/theme-icons/beihang-badge.jpg` | 主题选择器的第二个圆角方形预览 |
-| 北航主题陪伴角色 | `public/assets/companions/cream-companion.png` | `https://dobble-mode.vercel.app/assets/companions/cream-companion.png` | 右下角像素陪伴角色；仅目标网站本身存在相应角色入口时才使用 |
+| 北航主题陪伴角色 | `public/assets/companions/cream-companion-ui.png` | `https://dobble-mode.vercel.app/assets/companions/cream-companion-ui.png` | 右下角像素陪伴角色；仅目标网站本身存在相应角色入口时才使用 |
 | 底部导航图标 | `public/assets/nav/1.png` 至 `4.png` | `https://dobble-mode.vercel.app/assets/nav/1.png` 等 | 可作为蒙版图标；不要求替换目标网站已有、辨识度更高的业务图标 |
 | 预处理小尺寸背景 | `public/assets/seasons/*-pixel-v2.png`，1920 x 1080 | 对应同名 URL | 只适用于低性能兜底；正常情况优先用上方四张主背景 |
 
-素材均是背景和装饰资源。不要将其作为带文字的内容卡片，也不要在背景上再叠加网格、棋盘格或伪像素噪点。
+素材均是背景和装饰资源。不要将其作为带文字的内容卡片，也不要在背景上再叠加网格、棋盘格或伪像素噪点。高分辨率原图保存在仓库 `design-assets/archive`，不会进入网页或安装包；复刻运行界面时优先使用上表的 `-ui` 素材。
 
 ## 核心视觉规则
 
