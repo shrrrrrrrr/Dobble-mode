@@ -14,7 +14,9 @@ import { ProfessionalMode } from './professional/ProfessionalMode'
 import { Modal } from './components/Modal'
 
 function hasSavedContent(state: AppState) {
-  return state.works.length + state.feedback.length + state.posts.length + state.topics.length + state.scoreRecords.length + state.reviews.length > 0
+  const hasRecords = state.works.length + state.feedback.length + state.posts.length + state.topics.length + state.scoreRecords.length + state.reviews.length > 0
+  const hasPersonalSettings = state.profile.nickname !== '我' || state.profile.avatarLabel !== '我' || Boolean(state.profile.avatarImage) || state.theme !== 'mint' || state.mode !== 'life' || state.themeByMode.life !== 'mint' || state.themeByMode.professional !== 'cream'
+  return hasRecords || hasPersonalSettings
 }
 
 function storageErrorMessage(error: unknown) {

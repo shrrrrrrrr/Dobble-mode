@@ -1859,3 +1859,14 @@ M README.md
 ?? src/data/
 ?? src/utils/recapMedia.ts
 ```
+
+
+### 工作日志 2026年8月30日 20:26
+
+- 记录：V3.8 后整体质量巡检：完成 git 状态/近期提交/陈旧登录引用/密钥暴露/自动验证检查；未新增产品功能。确认 npm run build 与 npm run verify 通过（46/46），无 Service Role Key 前端引用、无未提交残留。优化旧账号迁移判定：此前仅以作品/反馈/帖子/专业记录判断是否有数据，现加入昵称、头像、生活/专业主题与模式偏好，避免只个性化设置过的旧账号在切换 Supabase 主登录时被遗漏。历史 HANDOFF 中仍保留早期 pixel-loop、本地账号和可选云同步描述，属于历史记录，当前行为以 V3.7/V3.8 段落、README 和 docs/SUPABASE_SETUP.md 为准。
+- 记录时 HEAD：`da9d60d`
+- 工作区状态：
+
+```text
+M src/App.tsx
+```
