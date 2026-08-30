@@ -389,16 +389,16 @@ export default function App() {
   </main>
 }
 
-type Background = { key: string; kind: 'image' | 'video'; source: string; poster?: string; pixelSize?: number; className: string }
+type Background = { key: string; kind: 'image' | 'video'; source: string; poster?: string; pixelSize?: number; className: string; focalPoint: { x: number; y: number } }
 
 function backgroundFor(theme: ThemeId, season: SeasonId): Background | null {
   if (theme === 'cream') {
     const pack = seasonPacks.find(item => item.id === season)
-    return { key: `cream-${season}`, kind: 'image', source: pack?.image ?? '', pixelSize: 5, className: `season-background season-${season}` }
+    return { key: `cream-${season}`, kind: 'image', source: pack?.image ?? '', pixelSize: 5, className: `season-background season-${season}`, focalPoint: { x: .5, y: .5 } }
   }
-  if (theme === 'night') return { key: 'night', kind: 'image', source: '/assets/sakura/background.jpg', pixelSize: 5, className: 'sakura-background' }
+  if (theme === 'night') return { key: 'night', kind: 'image', source: '/assets/sakura/background.jpg', pixelSize: 5, className: 'sakura-background', focalPoint: { x: .14, y: .5 } }
   const pack = themePacks.find(item => item.id === theme && item.available) ?? themePacks[0]
-  return pack.backgroundVideo ? { key: `video-${theme}`, kind: 'video', source: pack.backgroundVideo, poster: pack.poster, className: 'pixel-video-theme' } : null
+  return pack.backgroundVideo ? { key: `video-${theme}`, kind: 'video', source: pack.backgroundVideo, poster: pack.poster, className: 'pixel-video-theme', focalPoint: { x: .31, y: .55 } } : null
 }
 
 function PixelBackground({ theme, season }: { theme: ThemeId; season: SeasonId }) {
@@ -424,11 +424,11 @@ function PixelBackground({ theme, season }: { theme: ThemeId; season: SeasonId }
 function BackgroundLayer({ background, phase }: { background: Background; phase: 'leaving' | 'entering' | 'resting' }) {
   const className = `${background.className} theme-background-layer ${phase}`
   return background.kind === 'image'
-    ? <PixelatedImageBackground source={background.source} pixelSize={background.pixelSize ?? 5} className={className} />
-    : <PixelatedVideoBackground source={background.source} poster={background.poster} className={className} />
+    ? <PixelatedImageBackground source={background.source} pixelSize={background.pixelSize ?? 5} className={className} focalPoint={background.focalPoint} />
+    : <PixelatedVideoBackground source={background.source} poster={background.poster} className={className} focalPoint={background.focalPoint} />
 }
 
-function PixelatedImageBackground({ source, pixelSize, className }: { source: string; pixelSize: number; className: string }) {
+function PixelatedImageBackground({ source, pixelSize, className, focalPoint }: { source: string; pixelSize: number; className: string; focalPoint: { x: number; y: number } }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   useEffect(() => {
     const canvas = canvasRef.current
@@ -442,23 +442,23 @@ function PixelatedImageBackground({ source, pixelSize, className }: { source: st
       canvas.width = width
       canvas.height = height
       context.imageSmoothingEnabled = false
-      const portrait = window.innerHeight > window.innerWidth
-      const scale = portrait
-        ? Math.min(width / image.naturalWidth, height / image.naturalHeight)
-        : Math.max(width / image.naturalWidth, height / image.naturalHeight)
+      const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight)
       const drawWidth = image.naturalWidth * scale
       const drawHeight = image.naturalHeight * scale
-      context.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight)
+      const focus = window.innerHeight > window.innerWidth ? focalPoint : { x: .5, y: .5 }
+      const drawX = Math.min(0, Math.max(width - drawWidth, width / 2 - drawWidth * focus.x))
+      const drawY = Math.min(0, Math.max(height - drawHeight, height / 2 - drawHeight * focus.y))
+      context.drawImage(image, drawX, drawY, drawWidth, drawHeight)
     }
     image.onload = draw
     image.src = source
     window.addEventListener('resize', draw)
     return () => window.removeEventListener('resize', draw)
-  }, [source, pixelSize])
+  }, [source, pixelSize, focalPoint.x, focalPoint.y])
   return <canvas ref={canvasRef} className={`pixel-canvas-bg ${className}`} aria-hidden="true" />
 }
 
-function PixelatedVideoBackground({ source, poster, className }: { source: string; poster?: string; className: string }) {
+function PixelatedVideoBackground({ source, poster, className, focalPoint }: { source: string; poster?: string; className: string; focalPoint: { x: number; y: number } }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
 
@@ -486,18 +486,18 @@ function PixelatedVideoBackground({ source, poster, className }: { source: strin
       if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height }
       if (context && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth) {
         context.imageSmoothingEnabled = false
-        const portrait = window.innerHeight > window.innerWidth
-        const scale = portrait
-          ? Math.min(width / video.videoWidth, height / video.videoHeight)
-          : Math.max(width / video.videoWidth, height / video.videoHeight)
+        const scale = Math.max(width / video.videoWidth, height / video.videoHeight)
         const drawWidth = video.videoWidth * scale
         const drawHeight = video.videoHeight * scale
-        context.drawImage(video, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight)
+        const focus = window.innerHeight > window.innerWidth ? focalPoint : { x: .5, y: .5 }
+        const drawX = Math.min(0, Math.max(width - drawWidth, width / 2 - drawWidth * focus.x))
+        const drawY = Math.min(0, Math.max(height - drawHeight, height / 2 - drawHeight * focus.y))
+        context.drawImage(video, drawX, drawY, drawWidth, drawHeight)
         const seamDuration = 0.28
         const remaining = video.duration - video.currentTime
         if (capturedFirstFrame && Number.isFinite(remaining) && remaining > 0 && remaining < seamDuration) {
           context.globalAlpha = 1 - remaining / seamDuration
-          context.drawImage(firstFrame, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight)
+          context.drawImage(firstFrame, drawX, drawY, drawWidth, drawHeight)
           context.globalAlpha = 1
         }
       }
@@ -511,7 +511,7 @@ function PixelatedVideoBackground({ source, poster, className }: { source: strin
       window.cancelAnimationFrame(frame)
       video.removeEventListener('loadeddata', captureFirstFrame)
     }
-  }, [source])
+  }, [source, focalPoint.x, focalPoint.y])
   const mediaType = source.endsWith('.mp4') ? 'video/mp4' : 'video/webm'
   return <><canvas ref={canvasRef} className={`pixel-canvas-bg pixel-video-bg ${className}`} aria-hidden="true" /><video ref={videoRef} className="pixel-video-source" autoPlay muted loop playsInline preload="auto" poster={poster}><source src={source} type={mediaType} /></video></>
 }
