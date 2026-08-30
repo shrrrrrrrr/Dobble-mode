@@ -452,7 +452,7 @@ html,body,#root { min-width:0; }
   .work-card { grid-template-columns:76px minmax(0,1fr); gap:10px; }
   .cover { height:96px; padding:8px; font-size:15px; }
   .work-metrics,.toolbar-actions,.board-toolbar,.topic-actions { flex-wrap:wrap; }
-  .bottom-nav { width:calc(100% - 16px); left:8px; bottom:max(8px,env(safe-area-inset-bottom)); height:66px; }
+  .bottom-nav { left:8px; right:8px; width:auto; transform:none; bottom:max(8px,env(safe-area-inset-bottom)); height:66px; }
   .bottom-nav button { min-width:0; padding:7px 3px; font-size:11px; }
   .nav-mark { width:21px; height:21px; }
   .companion { right:2px; bottom:72px; }

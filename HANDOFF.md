@@ -1825,3 +1825,14 @@ M public/assets/pixel-original-poster.jpg
  M src/theme.ts
 ?? public/assets/pixel-original-clean.mp4
 ```
+
+
+### 工作日志 2026年8月30日 19:55
+
+- 记录：V3.7.3 手机底栏偏移修复：触屏布局下的 bottom-nav 同时固定 left/right 边距并显式 transform:none，避免在部分手机浏览器报告桌面宽度时继承桌面居中位移，导致底栏向左偏移和前两项不可见。已通过 npm run build、npm run verify（42/42）和 git diff --check。
+- 记录时 HEAD：`d5ee375`
+- 工作区状态：
+
+```text
+M src/styles.css
+```
