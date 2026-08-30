@@ -1,4 +1,4 @@
-import { FormEvent, PointerEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import type { FeedbackEvent, Platform, Post, ProfessionalTab, Tab, UserProfile, Work } from './types'
 import { compressImage } from './utils/image'
 import { buildCalendarArt } from './utils/calendarArt'
@@ -76,7 +76,6 @@ export default function App() {
   const [communityView, setCommunityView] = useState<'feed' | 'profile'>('feed')
   const [assistantPinned, setAssistantPinned] = useState(false)
   const [assistantHovered, setAssistantHovered] = useState(false)
-  const [assistantPos, setAssistantPos] = useState({ x: 0, y: 0 })
   const [legacyImportOpen, setLegacyImportOpen] = useState(false)
   const [notice, setNotice] = useState('')
   const [feedbackWorkId, setFeedbackWorkId] = useState<string | null>(null)
@@ -87,9 +86,6 @@ export default function App() {
   const [cloudBusy, setCloudBusy] = useState(false)
   const [cloudSyncedAt, setCloudSyncedAt] = useState('')
   const cloudPushTimer = useRef<number | null>(null)
-  const drag = useRef<{ startX: number; startY: number; originX: number; originY: number; minX: number; maxX: number; minY: number; maxY: number } | null>(null)
-  const didDrag = useRef(false)
-  const frameRef = useRef<HTMLElement | null>(null)
   const companionRef = useRef<HTMLButtonElement | null>(null)
   const assistantPanelRef = useRef<HTMLDivElement | null>(null)
 
@@ -342,26 +338,6 @@ export default function App() {
     setQuestion('')
   }
 
-  function startDrag(event: PointerEvent<HTMLButtonElement>) {
-    didDrag.current = false
-    const companionBounds = event.currentTarget.getBoundingClientRect()
-    const frameBounds = frameRef.current?.getBoundingClientRect()
-    const left = Math.max(0, frameBounds?.left ?? 0)
-    const right = Math.min(window.innerWidth, frameBounds?.right ?? window.innerWidth)
-    const top = Math.max(0, frameBounds?.top ?? 0)
-    const bottom = Math.min(window.innerHeight, frameBounds?.bottom ?? window.innerHeight)
-    drag.current = { startX: event.clientX, startY: event.clientY, originX: assistantPos.x, originY: assistantPos.y, minX: assistantPos.x + left - companionBounds.left, maxX: assistantPos.x + right - companionBounds.right, minY: assistantPos.y + top - companionBounds.top, maxY: assistantPos.y + bottom - companionBounds.bottom }
-    event.currentTarget.setPointerCapture(event.pointerId)
-  }
-  function moveDrag(event: PointerEvent<HTMLButtonElement>) {
-    if (!drag.current) return
-    if (Math.abs(event.clientX - drag.current.startX) > 5 || Math.abs(event.clientY - drag.current.startY) > 5) didDrag.current = true
-    const x = drag.current.originX + event.clientX - drag.current.startX
-    const y = drag.current.originY + event.clientY - drag.current.startY
-    setAssistantPos({ x: Math.max(drag.current.minX, Math.min(drag.current.maxX, x)), y: Math.max(drag.current.minY, Math.min(drag.current.maxY, y)) })
-  }
-  function endDrag() { drag.current = null }
-
   async function handleSignOut() {
     await signOut()
     setSession(null)
@@ -393,7 +369,7 @@ export default function App() {
 
   return <main className="app-shell">
     <PixelBackground theme={theme} season={season} />
-    <section className="mobile-frame" ref={frameRef}>
+    <section className="mobile-frame">
       <header className="topbar"><button className="brand tile-interactive" onClick={() => { if (state.mode === 'professional') { setProTab('topics') } else { setTab('home'); setCommunityView('feed') } setAssistantPinned(false) }} aria-label="留白，返回首页">留白</button><button className={`mode-switch ${state.mode}`} role="switch" aria-checked={state.mode === 'professional'} aria-label={`切换到${state.mode === 'life' ? '专业' : '生活'}模式`} onClick={() => switchMode(state.mode === 'life' ? 'professional' : 'life')}><span className="mode-window" aria-hidden="true"><span className="mode-life-scene"><span className="cornflower">✿</span><i>♫</i><b>♪</b><em /></span><span className="mode-night-scene"><span className="mode-stars"><i>✦</i><i>·</i><i>✧</i></span><img src="/assets/mode/professional-lamp.png" alt="" /></span></span><span className="mode-label">{state.mode === 'life' ? '生活' : '专业'}</span></button><div className="theme-switcher" aria-label="主题选择"><button className={`theme-dot ${theme === 'mint' ? 'active' : ''}`} onClick={() => { changeTheme('mint'); setAssistantPinned(false) }} title="默认主题" aria-label="默认主题" /><button className={`theme-dot cream ${theme === 'cream' ? 'active' : ''}`} onClick={() => { changeTheme('cream'); setAssistantPinned(false) }} title="北航四季" aria-label="北航四季" /><button className={`theme-dot night ${theme === 'night' ? 'active' : ''}`} onClick={() => { changeTheme('night'); setAssistantPinned(false) }} title="樱花夜" aria-label="樱花夜" /></div>{theme === 'cream' && <div className="season-switcher" aria-label="北航四季选择">{seasonPacks.map(pack => <button key={pack.id} className={season === pack.id ? 'active' : ''} onClick={() => { setSeason(pack.id); setAssistantPinned(false) }} style={{ '--season-accent': pack.accent } as React.CSSProperties}>{pack.name.split(' · ')[0]}</button>)}</div>}<div className="account-summary"><button className="account-profile" onClick={openMyProfile} aria-label="打开我的主页"><span>{session.username}</span><i aria-hidden="true">我</i></button><button className="sign-out" onClick={() => { handleSignOut(); setAssistantPinned(false) }}>退出</button></div></header>
       <div className="content" onClick={event => { if (assistantPinned && event.target === event.currentTarget) setAssistantPinned(false) }}>
         {notice && <div className="app-notice" role="alert"><span>{notice}</span><button onClick={() => setNotice('')} aria-label="关闭提示">关闭</button></div>}
@@ -408,8 +384,8 @@ export default function App() {
         ? <nav className="bottom-nav pro-nav">{proNav.map(item => <button key={item.id} className={proTab === item.id ? 'active' : ''} onClick={() => setProTab(item.id)}><span className="nav-mark" />{item.label}</button>)}</nav>
         : <nav className="bottom-nav">{nav.map(item => <button key={item.id} className={tab === item.id ? 'active' : ''} onClick={() => { setTab(item.id); if (item.id === 'community') setCommunityView('feed') }}><span className="nav-mark" />{item.label}</button>)}</nav>)}
     </section>
-    {state.mode === 'life' && <button ref={companionRef} className={`companion ${assistantPinned ? 'pinned' : ''}`} style={{ '--assistant-x': `${assistantPos.x}px`, '--assistant-y': `${assistantPos.y}px` } as React.CSSProperties} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerEnter={() => setAssistantHovered(true)} onPointerLeave={() => setAssistantHovered(false)} onClick={() => { if (!didDrag.current) setAssistantPinned(open => !open) }} aria-label="打开或关闭创作陪伴"><img src={`/assets/companions/${theme}-companion.png`} alt="" /><span>留</span></button>}
-    {state.mode === 'life' && (assistantPinned || assistantHovered) && <div ref={assistantPanelRef} className="assistant-panel" style={{ '--assistant-x': `${assistantPos.x}px`, '--assistant-y': `${assistantPos.y}px` } as React.CSSProperties} onPointerEnter={() => setAssistantHovered(true)} onPointerLeave={() => setAssistantHovered(false)}><p className="eyebrow">创作陪伴</p><h2>今天也在记录。</h2><p className="assistant-answer">{answer}</p><form onSubmit={askAssistant}><input value={question} onChange={e => setQuestion(e.target.value)} placeholder="问问我关于你的创作" /><button>发送</button></form></div>}
+    {state.mode === 'life' && <button ref={companionRef} className={`companion ${assistantPinned ? 'pinned' : ''}`} onPointerEnter={() => setAssistantHovered(true)} onPointerLeave={() => setAssistantHovered(false)} onClick={() => setAssistantPinned(open => !open)} aria-label="打开或关闭创作陪伴"><img src={`/assets/companions/${theme}-companion.png`} alt="" /><span>留</span></button>}
+    {state.mode === 'life' && (assistantPinned || assistantHovered) && <div ref={assistantPanelRef} className="assistant-panel" onPointerEnter={() => setAssistantHovered(true)} onPointerLeave={() => setAssistantHovered(false)}><p className="eyebrow">创作陪伴</p><h2>今天也在记录。</h2><p className="assistant-answer">{answer}</p><form onSubmit={askAssistant}><input value={question} onChange={e => setQuestion(e.target.value)} placeholder="问问我关于你的创作" /><button>发送</button></form></div>}
     {showWorkForm && <Modal title="记录一条作品" onClose={() => setShowWorkForm(false)}><WorkForm onSave={saveWork} /></Modal>}
     {showPostForm && <Modal title="发布到社区" onClose={() => setShowPostForm(false)}><PostForm onSave={savePost} /></Modal>}
     {showProfileForm && <Modal title="编辑个人资料" onClose={() => setShowProfileForm(false)}><ProfileForm profile={state.profile} onSave={saveProfile} /></Modal>}
