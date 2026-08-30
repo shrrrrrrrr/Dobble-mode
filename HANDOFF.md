@@ -1902,3 +1902,14 @@ M README.md
 ?? capacitor.config.ts
 ?? docs/ANDROID_BUILD.md
 ```
+
+
+### 工作日志 2026年8月31日 01:13
+
+- 记录：新增北航四季主题 UI 复刻说明 docs/BEIHANG_SEASONS_UI_SPEC.md：为外部 AI 明确前端改造边界（不得改后端/API/Supabase）、春夏秋冬背景素材的本地与线上地址、尺寸、色板、桌面和手机响应式排布、真实 canvas 像素化实现、纸片与按钮系统、字体、900ms 季节过渡、reduced-motion 降级、实施清单和验收标准。文档可直接作为另一网站只改前端 UI 的交接材料。已通过 git diff --check。
+- 记录时 HEAD：`c6d5da4`
+- 工作区状态：
+
+```text
+?? docs/BEIHANG_SEASONS_UI_SPEC.md
+```
