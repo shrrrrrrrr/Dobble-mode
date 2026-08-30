@@ -8,6 +8,8 @@ export type AppState = {
   posts: Post[]
   profile: UserProfile
   theme: ThemeId
+  /** Each mode keeps its own visual theme and restores it on mode changes. */
+  themeByMode: Record<'life' | 'professional', ThemeId>
   mode: 'life' | 'professional'
   topics: Topic[]
   scoreTemplates: ScoreTemplate[]
@@ -30,6 +32,7 @@ export function emptyAppState(): AppState {
     posts: [],
     profile: { ...initialProfile },
     theme: 'mint',
+    themeByMode: { life: 'mint', professional: 'cream' },
     mode: 'life',
     topics: [],
     scoreTemplates: [{ ...defaultScoreTemplate, items: defaultScoreTemplate.items.map(item => ({ ...item })) }],
@@ -58,6 +61,12 @@ export function normalizeAppState(userId: string, parsed?: Partial<AppState> | n
     : { ...initialProfile }
   const posts = Array.isArray(source.posts) ? source.posts.filter(isPost) : []
   const theme = source.theme === 'cream' || source.theme === 'night' ? source.theme : 'mint'
+  const rawThemes: Record<string, unknown> = isRecord(source.themeByMode) ? source.themeByMode : {}
+  const validTheme = (value: unknown, fallback: ThemeId): ThemeId => value === 'cream' || value === 'night' || value === 'mint' ? value : fallback
+  const themeByMode = {
+    life: validTheme(rawThemes.life, theme),
+    professional: validTheme(rawThemes.professional, 'cream'),
+  }
   const scoreTemplates = Array.isArray(source.scoreTemplates) && source.scoreTemplates.length > 0
     ? source.scoreTemplates.filter(isEntityWithId)
     : emptyAppState().scoreTemplates
@@ -69,6 +78,7 @@ export function normalizeAppState(userId: string, parsed?: Partial<AppState> | n
     ...source,
     profile,
     theme,
+    themeByMode,
     mode: source.mode === 'professional' ? 'professional' : 'life',
     works: Array.isArray(source.works) ? source.works : [],
     feedback: Array.isArray(source.feedback) ? source.feedback : [],

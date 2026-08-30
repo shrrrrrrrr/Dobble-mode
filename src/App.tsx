@@ -74,7 +74,8 @@ export default function App() {
   const [selectedWork, setSelectedWork] = useState<Work | null>(null)
   const [selectedRecap, setSelectedRecap] = useState(false)
   const [communityView, setCommunityView] = useState<'feed' | 'profile'>('feed')
-  const [assistantOpen, setAssistantOpen] = useState(false)
+  const [assistantPinned, setAssistantPinned] = useState(false)
+  const [assistantHovered, setAssistantHovered] = useState(false)
   const [assistantPos, setAssistantPos] = useState({ x: 0, y: 0 })
   const [legacyImportOpen, setLegacyImportOpen] = useState(false)
   const [notice, setNotice] = useState('')
@@ -89,6 +90,8 @@ export default function App() {
   const drag = useRef<{ startX: number; startY: number; originX: number; originY: number; minX: number; maxX: number; minY: number; maxY: number } | null>(null)
   const didDrag = useRef(false)
   const frameRef = useRef<HTMLElement | null>(null)
+  const companionRef = useRef<HTMLButtonElement | null>(null)
+  const assistantPanelRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (!session) {
@@ -120,6 +123,14 @@ export default function App() {
   useEffect(() => { document.body.dataset.mode = state.mode }, [state.mode])
   useEffect(() => { const timer = window.setInterval(() => setClock(new Date()), 1000); return () => window.clearInterval(timer) }, [])
   useEffect(() => { getSession().then(savedSession => { setSession(savedSession); setSessionReady(true) }) }, [])
+  useEffect(() => {
+    const closePinnedAssistant = (event: globalThis.PointerEvent) => {
+      const target = event.target as Node
+      if (assistantPinned && !companionRef.current?.contains(target) && !assistantPanelRef.current?.contains(target)) setAssistantPinned(false)
+    }
+    window.addEventListener('pointerdown', closePinnedAssistant)
+    return () => window.removeEventListener('pointerdown', closePinnedAssistant)
+  }, [assistantPinned])
   useEffect(() => {
     if (!cloudEnabled) return
     getCloudAccount().then(account => setCloudAccount(account))
@@ -214,14 +225,28 @@ export default function App() {
 
   function changeTheme(nextTheme: ThemeId) {
     const pack = themePacks.find(item => item.id === nextTheme)
-    if (pack?.available) setState(current => ({ ...current, theme: nextTheme }))
+    if (pack?.available) setState(current => ({
+      ...current,
+      theme: nextTheme,
+      themeByMode: { ...current.themeByMode, [current.mode]: nextTheme },
+    }))
   }
 
   function switchMode(nextMode: 'life' | 'professional') {
-    setState(current => ({ ...current, mode: nextMode }))
+    setState(current => ({ ...current, mode: nextMode, theme: current.themeByMode[nextMode] }))
     setSelectedWork(null)
     setSelectedRecap(false)
-    setAssistantOpen(false)
+    setAssistantPinned(false)
+    setAssistantHovered(false)
+  }
+
+  function openMyProfile() {
+    setState(current => current.mode === 'life' ? current : ({ ...current, mode: 'life', theme: current.themeByMode.life }))
+    setTab('community')
+    setCommunityView('profile')
+    setSelectedWork(null)
+    setSelectedRecap(false)
+    setAssistantPinned(false)
   }
 
   async function saveWork(event: FormEvent<HTMLFormElement>) {
@@ -369,11 +394,11 @@ export default function App() {
   return <main className="app-shell">
     <PixelBackground theme={theme} season={season} />
     <section className="mobile-frame" ref={frameRef}>
-      <header className="topbar"><button className="brand tile-interactive" onClick={() => { if (state.mode === 'professional') { setProTab('topics') } else { setTab('home'); setCommunityView('feed') } setAssistantOpen(false) }} aria-label="留白，返回首页">留白</button><div className="mode-switch" role="tablist" aria-label="模式切换"><button className={state.mode === 'life' ? 'active' : ''} onClick={() => switchMode('life')}>生活</button><button className={state.mode === 'professional' ? 'active' : ''} onClick={() => switchMode('professional')}>专业</button></div><div className="theme-switcher" aria-label="主题选择"><button className={`theme-dot ${theme === 'mint' ? 'active' : ''}`} onClick={() => { changeTheme('mint'); setAssistantOpen(false) }} title="默认主题" aria-label="默认主题" /><button className={`theme-dot cream ${theme === 'cream' ? 'active' : ''}`} onClick={() => { changeTheme('cream'); setAssistantOpen(false) }} title="北航四季" aria-label="北航四季" /><button className={`theme-dot night ${theme === 'night' ? 'active' : ''}`} onClick={() => { changeTheme('night'); setAssistantOpen(false) }} title="樱花夜" aria-label="樱花夜" /></div>{theme === 'cream' && <div className="season-switcher" aria-label="北航四季选择">{seasonPacks.map(pack => <button key={pack.id} className={season === pack.id ? 'active' : ''} onClick={() => { setSeason(pack.id); setAssistantOpen(false) }} style={{ '--season-accent': pack.accent } as React.CSSProperties}>{pack.name.split(' · ')[0]}</button>)}</div>}<div className="account-summary"><span>{session.username}</span><button onClick={() => { handleSignOut(); setAssistantOpen(false) }}>退出</button></div></header>
-      <div className="content" onClick={event => { if (assistantOpen && event.target === event.currentTarget) setAssistantOpen(false) }}>
+      <header className="topbar"><button className="brand tile-interactive" onClick={() => { if (state.mode === 'professional') { setProTab('topics') } else { setTab('home'); setCommunityView('feed') } setAssistantPinned(false) }} aria-label="留白，返回首页">留白</button><div className={`mode-switch ${state.mode}`} role="tablist" aria-label="模式切换"><button className={state.mode === 'life' ? 'active' : ''} onClick={() => switchMode('life')} aria-selected={state.mode === 'life'}><span className="mode-scene flower-scene" aria-hidden="true">✿<i>♫</i><b>⌇</b></span><span>生活</span></button><button className={state.mode === 'professional' ? 'active' : ''} onClick={() => switchMode('professional')} aria-selected={state.mode === 'professional'}><span className="mode-scene lamp-scene" aria-hidden="true">⌁<i>✦</i><b>⋆</b></span><span>专业</span></button></div><div className="theme-switcher" aria-label="主题选择"><button className={`theme-dot ${theme === 'mint' ? 'active' : ''}`} onClick={() => { changeTheme('mint'); setAssistantPinned(false) }} title="默认主题" aria-label="默认主题" /><button className={`theme-dot cream ${theme === 'cream' ? 'active' : ''}`} onClick={() => { changeTheme('cream'); setAssistantPinned(false) }} title="北航四季" aria-label="北航四季" /><button className={`theme-dot night ${theme === 'night' ? 'active' : ''}`} onClick={() => { changeTheme('night'); setAssistantPinned(false) }} title="樱花夜" aria-label="樱花夜" /></div>{theme === 'cream' && <div className="season-switcher" aria-label="北航四季选择">{seasonPacks.map(pack => <button key={pack.id} className={season === pack.id ? 'active' : ''} onClick={() => { setSeason(pack.id); setAssistantPinned(false) }} style={{ '--season-accent': pack.accent } as React.CSSProperties}>{pack.name.split(' · ')[0]}</button>)}</div>}<div className="account-summary"><button className="account-profile" onClick={openMyProfile} aria-label="打开我的主页"><span>{session.username}</span><i aria-hidden="true">我</i></button><button className="sign-out" onClick={() => { handleSignOut(); setAssistantPinned(false) }}>退出</button></div></header>
+      <div className="content" onClick={event => { if (assistantPinned && event.target === event.currentTarget) setAssistantPinned(false) }}>
         {notice && <div className="app-notice" role="alert"><span>{notice}</span><button onClick={() => setNotice('')} aria-label="关闭提示">关闭</button></div>}
         {state.mode === 'professional' ? <ProfessionalMode tab={proTab} onTabChange={setProTab} works={state.works} topics={state.topics} templates={state.scoreTemplates} records={state.scoreRecords} reviews={state.reviews} onTopicsChange={topics => setState(current => ({ ...current, topics }))} onTemplatesChange={scoreTemplates => setState(current => ({ ...current, scoreTemplates }))} onRecordsChange={scoreRecords => setState(current => ({ ...current, scoreRecords }))} onReviewsChange={reviews => setState(current => ({ ...current, reviews }))} /> : selectedRecap ? <WeeklyRecap works={recentWorks} feedback={recentFeedback} onClose={() => setSelectedRecap(false)} /> : selectedWork ? <WorkDetail work={selectedWork} feedback={state.feedback.filter((item: FeedbackEvent) => item.workId === selectedWork.id)} onClose={() => setSelectedWork(null)} onSaveNote={updateNote} onFeedback={() => setFeedbackWorkId(selectedWork.id)} /> : <>
-          {tab === 'home' && <Home profile={state.profile} works={recentWorks} feedback={recentFeedback} dateLabel={todayLabel} clockText={formatClock(clock)} clock={clock} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} onNavigate={nextTab => { setTab(nextTab); if (nextTab === 'community') setCommunityView('feed') }} onOpenProfile={() => { setTab('community'); setCommunityView('profile') }} />}
+          {tab === 'home' && <Home works={recentWorks} feedback={recentFeedback} dateLabel={todayLabel} clockText={formatClock(clock)} clock={clock} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} onNavigate={nextTab => { setTab(nextTab); if (nextTab === 'community') setCommunityView('feed') }} />}
           {tab === 'works' && <Works works={state.works} onAdd={() => setShowWorkForm(true)} onOpenWork={setSelectedWork} />}
           {tab === 'memories' && <Memories memories={memories} works={recentWorks} onOpenRecap={() => setSelectedRecap(true)} />}
           {tab === 'community' && <Community userId={session.userId} view={communityView} profile={state.profile} posts={state.posts} onAdd={() => setShowPostForm(true)} onLike={toggleLike} onComment={addComment} onViewChange={setCommunityView} onEditProfile={() => setShowProfileForm(true)} badgeWall={<BadgeWall badges={state.badges} state={state} />} cloudPanel={<CloudSyncPanel account={cloudAccount} busy={cloudBusy} message={cloudMessage} syncedAt={cloudSyncedAt} onSignIn={async (email, password) => { const result = await cloudSignIn(email, password); if (result.ok) { setCloudAccount(result.data); setCloudMessage('') } return result.ok ? null : result.error }} onSignUp={async (email, password) => { const result = await cloudSignUp(email, password); if (result.ok) { setCloudAccount(result.data); setCloudMessage('') } return result.ok ? null : result.error }} onSignOut={handleCloudSignOut} onSyncNow={syncCloudNow} />} />}
@@ -383,8 +408,8 @@ export default function App() {
         ? <nav className="bottom-nav pro-nav">{proNav.map(item => <button key={item.id} className={proTab === item.id ? 'active' : ''} onClick={() => setProTab(item.id)}><span className="nav-mark" />{item.label}</button>)}</nav>
         : <nav className="bottom-nav">{nav.map(item => <button key={item.id} className={tab === item.id ? 'active' : ''} onClick={() => { setTab(item.id); if (item.id === 'community') setCommunityView('feed') }}><span className="nav-mark" />{item.label}</button>)}</nav>)}
     </section>
-    {state.mode === 'life' && <button className="companion" style={{ transform: `translate(${assistantPos.x}px, ${assistantPos.y}px)` }} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onClick={() => { if (!didDrag.current) setAssistantOpen(open => !open) }} aria-label="打开或关闭创作陪伴"><span>留</span></button>}
-    {state.mode === 'life' && assistantOpen && <div className="assistant-panel" style={{ transform: `translate(${assistantPos.x}px, ${assistantPos.y}px)` }}><p className="eyebrow">创作陪伴</p><h2>今天也在记录。</h2><p className="assistant-answer">{answer}</p><form onSubmit={askAssistant}><input value={question} onChange={e => setQuestion(e.target.value)} placeholder="问问我关于你的创作" /><button>发送</button></form></div>}
+    {state.mode === 'life' && <button ref={companionRef} className={`companion ${assistantPinned ? 'pinned' : ''}`} style={{ '--assistant-x': `${assistantPos.x}px`, '--assistant-y': `${assistantPos.y}px` } as React.CSSProperties} onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerEnter={() => setAssistantHovered(true)} onPointerLeave={() => setAssistantHovered(false)} onClick={() => { if (!didDrag.current) setAssistantPinned(open => !open) }} aria-label="打开或关闭创作陪伴"><img src={`/assets/companions/${theme}-companion.png`} alt="" /><span>留</span></button>}
+    {state.mode === 'life' && (assistantPinned || assistantHovered) && <div ref={assistantPanelRef} className="assistant-panel" style={{ '--assistant-x': `${assistantPos.x}px`, '--assistant-y': `${assistantPos.y}px` } as React.CSSProperties} onPointerEnter={() => setAssistantHovered(true)} onPointerLeave={() => setAssistantHovered(false)}><p className="eyebrow">创作陪伴</p><h2>今天也在记录。</h2><p className="assistant-answer">{answer}</p><form onSubmit={askAssistant}><input value={question} onChange={e => setQuestion(e.target.value)} placeholder="问问我关于你的创作" /><button>发送</button></form></div>}
     {showWorkForm && <Modal title="记录一条作品" onClose={() => setShowWorkForm(false)}><WorkForm onSave={saveWork} /></Modal>}
     {showPostForm && <Modal title="发布到社区" onClose={() => setShowPostForm(false)}><PostForm onSave={savePost} /></Modal>}
     {showProfileForm && <Modal title="编辑个人资料" onClose={() => setShowProfileForm(false)}><ProfileForm profile={state.profile} onSave={saveProfile} /></Modal>}
@@ -394,11 +419,67 @@ export default function App() {
 }
 
 function PixelBackground({ theme, season }: { theme: ThemeId; season: SeasonId }) {
-  if (theme === 'cream') return <div className={`season-background season-${season}`} style={{ backgroundImage: `url(${seasonPacks.find(item => item.id === season)?.image})` }} aria-hidden="true" />
-  if (theme === 'night') return <div className="sakura-background" aria-hidden="true" />
+  if (theme === 'cream') return <PixelatedImageBackground source={seasonPacks.find(item => item.id === season)?.image ?? ''} pixelSize={3} className={`season-background season-${season}`} />
+  if (theme === 'night') return <PixelatedImageBackground source="/assets/sakura/background.jpg" pixelSize={5} className="sakura-background" />
   const pack = themePacks.find(item => item.id === theme && item.available) ?? themePacks[0]
   if (!pack.backgroundVideo) return null
-  return <video className="pixel-video-bg visible" autoPlay muted loop playsInline aria-hidden="true" poster={pack.poster} ref={video => { if (video) video.playbackRate = 0.55 }}><source src={pack.backgroundVideo} type="video/webm" /></video>
+  return <PixelatedVideoBackground source={pack.backgroundVideo} poster={pack.poster} />
+}
+
+function PixelatedImageBackground({ source, pixelSize, className }: { source: string; pixelSize: number; className: string }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !source) return
+    const context = canvas.getContext('2d')
+    const image = new Image()
+    const draw = () => {
+      if (!context || !image.naturalWidth) return
+      const width = Math.max(1, Math.ceil(window.innerWidth / pixelSize))
+      const height = Math.max(1, Math.ceil(window.innerHeight / pixelSize))
+      canvas.width = width
+      canvas.height = height
+      context.imageSmoothingEnabled = false
+      const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight)
+      const drawWidth = image.naturalWidth * scale
+      const drawHeight = image.naturalHeight * scale
+      context.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight)
+    }
+    image.onload = draw
+    image.src = source
+    window.addEventListener('resize', draw)
+    return () => window.removeEventListener('resize', draw)
+  }, [source, pixelSize])
+  return <canvas ref={canvasRef} className={`pixel-canvas-bg ${className}`} aria-hidden="true" />
+}
+
+function PixelatedVideoBackground({ source, poster }: { source: string; poster?: string }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  useEffect(() => {
+    const canvas = canvasRef.current
+    const video = videoRef.current
+    if (!canvas || !video) return
+    let frame = 0
+    const draw = () => {
+      const context = canvas.getContext('2d')
+      const width = Math.max(1, Math.ceil(window.innerWidth / 5))
+      const height = Math.max(1, Math.ceil(window.innerHeight / 5))
+      if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height }
+      if (context && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        context.imageSmoothingEnabled = false
+        const scale = Math.max(width / video.videoWidth, height / video.videoHeight)
+        const drawWidth = video.videoWidth * scale
+        const drawHeight = video.videoHeight * scale
+        context.drawImage(video, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight)
+      }
+      frame = window.requestAnimationFrame(draw)
+    }
+    video.play().catch(() => undefined)
+    draw()
+    return () => window.cancelAnimationFrame(frame)
+  }, [source])
+  return <><canvas ref={canvasRef} className="pixel-canvas-bg pixel-video-bg visible" aria-hidden="true" /><video ref={videoRef} className="pixel-video-source" autoPlay muted loop playsInline poster={poster}><source src={source} type="video/webm" /></video></>
 }
 
 function LocalAuthPage({ onAuthenticated }: { onAuthenticated: (session: AppSession) => void }) {
@@ -434,7 +515,7 @@ function useCalendarArt(date: Date) {
   return art
 }
 
-function Home({ profile, works, feedback, dateLabel, clockText, clock, onAdd, onOpenWork, onNavigate, onOpenProfile }: { profile: UserProfile; works: Work[]; feedback: FeedbackEvent[]; dateLabel: string; clockText: string; clock: Date; onAdd: () => void; onOpenWork: (work: Work) => void; onNavigate: (tab: Tab) => void; onOpenProfile: () => void }) {
+function Home({ works, feedback, dateLabel, clockText, clock, onAdd, onOpenWork, onNavigate }: { works: Work[]; feedback: FeedbackEvent[]; dateLabel: string; clockText: string; clock: Date; onAdd: () => void; onOpenWork: (work: Work) => void; onNavigate: (tab: Tab) => void }) {
   const now = new Date()
   const hourAngle = (now.getHours() % 12) * 30 + now.getMinutes() * 0.5
   const minuteAngle = now.getMinutes() * 6 + now.getSeconds() * 0.1
@@ -444,14 +525,13 @@ function Home({ profile, works, feedback, dateLabel, clockText, clock, onAdd, on
   const calendarArt = useCalendarArt(clock)
   return <div className="studio-layout">
     <aside className="creator-aside">
-      <button className="avatar-sticker tile-interactive" onClick={onOpenProfile} aria-label="打开我的主页">{profile.avatarImage ? <img src={profile.avatarImage} alt="我的头像" /> : profile.avatarLabel}</button>
-      <div><h2>今天的<br />创作桌面</h2><p>慢一点，也没关系。</p></div>
+      <div className="desk-title"><h2>今天的<br />创作桌面</h2><p>慢一点，也没关系。</p></div>
       <nav className="studio-nav" aria-label="创作桌面导航">
         <button className="side-link tile-interactive" onClick={() => onNavigate('works')}><i />作品档案</button>
         <button className="side-link tile-interactive" onClick={() => onNavigate('memories')}><i />短期回看</button>
         <button className="side-link tile-interactive" onClick={() => onNavigate('community')}><i />创作社区</button>
       </nav>
-      <button className="aside-note tile-interactive" onClick={onOpenProfile}>我的徽章与发帖</button>
+      <p className="aside-note">把每一次认真，都留在这里。</p>
     </aside>
     <section className="studio-stage">
       <section className="hero studio-hero"><p className="eyebrow">{dateLabel}</p><h1>把创作过成<br />自己的生活。</h1><p>不用急着解释数据，先把每一次认真留下来。</p><button className="primary tile-interactive" onClick={onAdd}>记录新作品</button></section>

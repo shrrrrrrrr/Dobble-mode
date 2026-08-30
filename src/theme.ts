@@ -9,10 +9,10 @@ export interface SeasonPack {
 }
 
 export const seasonPacks: SeasonPack[] = [
-  { id: 'spring', name: '春 · 春日校园', image: '/assets/seasons/spring-pixel-v2.png', accent: '#d87891' },
-  { id: 'summer', name: '夏 · 盛夏校园', image: '/assets/seasons/summer-pixel-v2.png', accent: '#299b91' },
-  { id: 'autumn', name: '秋 · 秋日校园', image: '/assets/seasons/autumn-pixel-v2.png', accent: '#c7773e' },
-  { id: 'winter', name: '冬 · 冬日校园', image: '/assets/seasons/winter-pixel-v2.png', accent: '#5e9ec9' },
+  { id: 'spring', name: '春 · 春日校园', image: '/assets/seasons/spring.jpg', accent: '#d87891' },
+  { id: 'summer', name: '夏 · 盛夏校园', image: '/assets/seasons/summer.jpg', accent: '#299b91' },
+  { id: 'autumn', name: '秋 · 秋日校园', image: '/assets/seasons/autumn.jpg', accent: '#c7773e' },
+  { id: 'winter', name: '冬 · 冬日校园', image: '/assets/seasons/winter.jpg', accent: '#5e9ec9' },
 ]
 
 export interface ThemePack {
